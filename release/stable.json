@@ -7,8 +7,8 @@
   "minimumVersion": "0.6.0",
   "releaseUrl": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.6.7.tar.gz",
   "url": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.6.7.tar.gz",
-  "sha256": "7c1b3d96e6f64a3992660800533056d7726d36d3158d82ae6b15cd9cc0c8c5ab",
-  "size": 208237,
+  "sha256": "79c6f749c8c315639d7f800da2858622c6998f2c479a05ada261152d917444f6",
+  "size": 209176,
   "installUrl": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/install.sh",
   "canonicalBaseUrl": "https://releases.kmerhosting.com/wfilemanager",
   "githubUrl": "https://github.com/toscani-tenekeu/wFileManager",
@@ -35,6 +35,6 @@
     "updaterService": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-updater@.service",
     "updaterServiceSha256": "b9a9dabcbebafa5c34f19c01fd91591093b9e2a76db71ec342433dd7da77ffa4",
     "migrationPatch": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/migrate-existing-vps.sh",
-    "migrationPatchSha256": "76845add5fc558df54d6270cfe4622853d85a26063edbddbc22ac66f695730f7"
+    "migrationPatchSha256": "62af4c271d5683a19105a02dc556484745e417a6deb9b76b36448cbe99a752ea"
   }
 }
