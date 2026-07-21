@@ -30,6 +30,9 @@ install -d -m 700 /var/lib/wfilemanager/trash /var/lib/wfilemanager/update
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 if [[ -f "$OLD_APP/.env" ]]; then cp "$OLD_APP/.env" "$TMP/old.env"; fi
+if [[ -f /etc/systemd/system/wfilemanager.service ]]; then
+  cp -a /etc/systemd/system/wfilemanager.service "$TMP/wfilemanager.service.old"
+fi
 
 cat > "$ENV_FILE" <<ENV
 PORT=$PORT
@@ -65,6 +68,7 @@ done
 chmod 750 /usr/local/lib/wfilemanager/update.sh
 
 systemctl stop wfilemanager.service 2>/dev/null || true
+LEGACY=""
 if [[ -d "$OLD_APP" && ! -L "$OLD_APP" ]]; then
   LEGACY="$APP_ROOT/legacy-$(date +%Y%m%d-%H%M%S)"
   mv "$OLD_APP" "$LEGACY"
@@ -72,7 +76,19 @@ fi
 ln -sfn "$APP_ROOT/current" "$OLD_APP"
 systemctl daemon-reload
 systemctl enable wfilemanager.service
-/usr/local/lib/wfilemanager/update.sh install
+
+if ! /usr/local/lib/wfilemanager/update.sh install; then
+  echo "Initial release installation failed; restoring the previous deployment." >&2
+  rm -f "$OLD_APP"
+  if [[ -n "$LEGACY" && -d "$LEGACY" ]]; then mv "$LEGACY" "$OLD_APP"; fi
+  if [[ -f "$TMP/wfilemanager.service.old" ]]; then
+    cp -a "$TMP/wfilemanager.service.old" /etc/systemd/system/wfilemanager.service
+  fi
+  systemctl daemon-reload
+  systemctl restart wfilemanager.service 2>/dev/null || true
+  exit 1
+fi
+
 systemctl restart wfilemanager.service
 sleep 3
 curl -fsS "http://127.0.0.1:$PORT/" >/dev/null
