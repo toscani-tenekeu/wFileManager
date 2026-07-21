@@ -88,14 +88,7 @@ build_release() {
   export PATH="/root/.bun/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
   command -v bun >/dev/null 2>&1 || fail "Bun is not installed"
   state installing 62 "Installing dependencies" "$TARGET_VERSION"
-  if [[ -f bun.lock ]]; then
-    if ! bun install --frozen-lockfile; then
-      echo "bun.lock is stale; regenerating it for this release..." >&2
-      bun install
-    fi
-  else
-    bun install
-  fi
+  bun install
   state building 78 "Building wFileManager" "$TARGET_VERSION"
   bun run build
   bun run typecheck
