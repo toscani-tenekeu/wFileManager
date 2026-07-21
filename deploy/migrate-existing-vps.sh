@@ -14,6 +14,16 @@ INSTANCE_KEY="wfilemanager-kmerhosting-com"
 [[ $EUID -eq 0 ]] || { echo "Run as root" >&2; exit 1; }
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates jq tar gzip xz-utils build-essential python3 make g++ sudo passwd util-linux
+
+if ! command -v node >/dev/null 2>&1 || [[ "$(node -p 'Number(process.versions.node.split(`.`)[0])' 2>/dev/null || echo 0)" -lt 20 ]]; then
+  curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
+  DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
+fi
+if ! command -v bun >/dev/null 2>&1; then
+  curl -fsSL https://bun.sh/install | bash
+fi
+export PATH="/root/.bun/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
 install -d -m 755 "$APP_ROOT/releases" "$CONFIG_DIR" /usr/local/lib/wfilemanager
 install -d -m 700 /var/lib/wfilemanager/trash /var/lib/wfilemanager/update
 
