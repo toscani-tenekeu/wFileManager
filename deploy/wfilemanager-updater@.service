@@ -1,0 +1,15 @@
+[Unit]
+Description=wFileManager updater (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=-/etc/wfilemanager/wfilemanager.env
+ExecStart=/usr/local/lib/wfilemanager/update.sh %i
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+TimeoutStartSec=45min
