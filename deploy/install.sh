@@ -67,9 +67,15 @@ printf '%s  %s\n' "${UPDATER_SHA,,}" /usr/local/lib/wfilemanager/update.sh | sha
 chmod 750 /usr/local/lib/wfilemanager/update.sh
 
 UPDATER_SERVICE_URL="$(jq -r '.assets.updaterService // empty' "$TMP/stable.json")"
+UPDATER_SERVICE_SHA="$(jq -r '.assets.updaterServiceSha256 // empty' "$TMP/stable.json")"
 APP_SERVICE_URL="$(jq -r '.assets.appService // empty' "$TMP/stable.json")"
+APP_SERVICE_SHA="$(jq -r '.assets.appServiceSha256 // empty' "$TMP/stable.json")"
+[[ "$UPDATER_SERVICE_URL" == https://* && "$UPDATER_SERVICE_SHA" =~ ^[a-fA-F0-9]{64}$ ]] || { echo "The stable manifest does not contain a valid updater service asset." >&2; exit 1; }
+[[ "$APP_SERVICE_URL" == https://* && "$APP_SERVICE_SHA" =~ ^[a-fA-F0-9]{64}$ ]] || { echo "The stable manifest does not contain a valid application service asset." >&2; exit 1; }
 curl -fsSL --retry 3 "$UPDATER_SERVICE_URL" -o /etc/systemd/system/wfilemanager-updater@.service
 curl -fsSL --retry 3 "$APP_SERVICE_URL" -o /etc/systemd/system/wfilemanager.service
+printf '%s  %s\n' "${UPDATER_SERVICE_SHA,,}" /etc/systemd/system/wfilemanager-updater@.service | sha256sum -c -
+printf '%s  %s\n' "${APP_SERVICE_SHA,,}" /etc/systemd/system/wfilemanager.service | sha256sum -c -
 systemctl daemon-reload
 systemctl enable wfilemanager.service
 
