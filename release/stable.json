@@ -7,8 +7,8 @@
   "minimumVersion": "0.6.0",
   "releaseUrl": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.6.6.tar.gz",
   "url": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.6.6.tar.gz",
-  "sha256": "c03531d6c70d141e84525cc7661fc2564e0852ff48f775b3772bcbb0178dc3c7",
-  "size": 208243,
+  "sha256": "93ba927ff2331b7f9f679782143aed2aee9c999cfcba54be0cda61b36e0c911c",
+  "size": 208491,
   "installUrl": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/install.sh",
   "canonicalBaseUrl": "https://releases.kmerhosting.com/wfilemanager",
   "githubUrl": "https://github.com/toscani-tenekeu/wFileManager",
@@ -25,14 +25,14 @@
   ],
   "assets": {
     "installer": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/install.sh",
-    "installerSha256": "503bb53eb5dc8517ce79bcf34534bf8c34c17335417bf747b003f26097129622",
+    "installerSha256": "2e4f9f3a32e33460ceec3c812b6e45eb1eb89cb3465e976813fdbf9f089b2bbc",
     "updater": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/update.sh",
-    "updaterSha256": "c4ae1b29121415dbf0fa6c0a726f7de8a4e3680e9ecd6bc992163717c956b31a",
+    "updaterSha256": "b2f9c6149a3b557ff03628b16663a69a8e2376d57888d532ab24dbec50de60da",
     "appService": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager.service",
     "appServiceSha256": "d50b7e29ad60f32c5e2dfa9cf86d422e1b36c71d36fa3680c45799f529541251",
     "updaterService": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-updater@.service",
     "updaterServiceSha256": "b9a9dabcbebafa5c34f19c01fd91591093b9e2a76db71ec342433dd7da77ffa4",
     "migrationPatch": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/migrate-existing-vps.sh",
-    "migrationPatchSha256": "ad9ac756c67294191009d2ae39dd23310d615e9f76557466bcf5893ba7fe2140"
+    "migrationPatchSha256": "5d09e3b6aa62188cee1477abbb3eecbf3a9245a51ed721bfbad1540c9449d4a1"
   }
 }
