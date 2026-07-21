@@ -33,7 +33,7 @@ curl -fsSL https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/rel
 For a domain and automatic SSL attempt:
 
 ```bash
-curl -fsSL https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/install.sh | sudo DOMAIN=files.example.com ENABLE_SSL=auto bash
+curl -fsSL https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/install.sh | sudo env DOMAIN=files.example.com ENABLE_SSL=auto bash
 ```
 
 The installer uses versioned releases under `/opt/wfilemanager/releases`, persistent configuration under `/etc/wfilemanager`, application state under `/var/lib/wfilemanager`, and the atomic `/opt/wfilemanager/current` symlink.
@@ -42,7 +42,20 @@ The installer uses versioned releases under `/opt/wfilemanager/releases`, persis
 
 The official stable manifest is stored in the public Supabase Storage bucket `releases.kmerhosting.com` at `wfilemanager/stable.json`. Releases are downloaded over HTTPS, checked with SHA-256, built in a new versioned directory, activated atomically and health-checked. A failed health check automatically restores the previous release.
 
-No GitHub Actions workflow is used. Releases are published manually.
+The application can check and install releases from **About & updates**. Administrators can also run:
+
+```bash
+sudo systemctl start wfilemanager-updater@install.service
+sudo journalctl -u wfilemanager-updater@install.service -f
+```
+
+Rollback:
+
+```bash
+sudo systemctl start wfilemanager-updater@rollback.service
+```
+
+No GitHub Actions workflow is used. Releases are published manually and `stable.json` is uploaded last.
 
 ## Development
 
