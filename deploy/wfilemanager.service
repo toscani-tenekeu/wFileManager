@@ -1,0 +1,22 @@
+[Unit]
+Description=wFileManager local Linux file manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/wfilemanager/current
+EnvironmentFile=-/etc/wfilemanager/wfilemanager.env
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+ExecStart=/usr/bin/node /opt/wfilemanager/current/.output/server/index.mjs
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+NoNewPrivileges=false
+
+[Install]
+WantedBy=multi-user.target
