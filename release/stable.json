@@ -2,32 +2,34 @@
   "schema": 1,
   "product": "wfilemanager",
   "channel": "stable",
-  "version": "0.6.6",
-  "publishedAt": "2026-07-21T22:55:00Z",
+  "version": "0.6.7",
+  "publishedAt": "2026-07-22T00:30:00Z",
   "minimumVersion": "0.6.0",
-  "releaseUrl": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.6.6.tar.gz",
-  "url": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.6.6.tar.gz",
-  "sha256": "76e715a04c10644a4ab17ab85eaff586422c57140eacb531572491e92e94fbe4",
-  "size": 209042,
+  "releaseUrl": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.6.7.tar.gz",
+  "url": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.6.7.tar.gz",
+  "sha256": "7c1b3d96e6f64a3992660800533056d7726d36d3158d82ae6b15cd9cc0c8c5ab",
+  "size": 208237,
   "installUrl": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/install.sh",
   "canonicalBaseUrl": "https://releases.kmerhosting.com/wfilemanager",
   "githubUrl": "https://github.com/toscani-tenekeu/wFileManager",
   "compatibility": {
     "operatingSystem": "Ubuntu >= 20.04 LTS",
     "recommended": "Ubuntu 24.04 LTS",
-    "architectures": ["amd64", "arm64"]
+    "architectures": [
+      "amd64",
+      "arm64"
+    ]
   },
   "notes": [
-    "Adds verified in-app installation of stable updates.",
-    "Adds automatic rollback when the new release fails its local health check.",
-    "Adds a reusable Ubuntu installer and versioned release layout.",
-    "Publishes the official stable channel from Supabase Storage."
+    "Fixes installation when bun.lock needs regeneration.",
+    "Keeps frozen-lockfile verification first, then safely regenerates a stale lockfile.",
+    "Preserves verified downloads, atomic activation, health checks and rollback."
   ],
   "assets": {
     "installer": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/install.sh",
     "installerSha256": "2e4f9f3a32e33460ceec3c812b6e45eb1eb89cb3465e976813fdbf9f089b2bbc",
     "updater": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/update.sh",
-    "updaterSha256": "b2f9c6149a3b557ff03628b16663a69a8e2376d57888d532ab24dbec50de60da",
+    "updaterSha256": "7b602b78077c7b3fc52f0e1e23196c4219700e91484bceeda58cf8798a774133",
     "appService": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager.service",
     "appServiceSha256": "d50b7e29ad60f32c5e2dfa9cf86d422e1b36c71d36fa3680c45799f529541251",
     "updaterService": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-updater@.service",
