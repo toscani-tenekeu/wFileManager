@@ -56,11 +56,12 @@ chmod 600 "$ENV_FILE"
 curl -fsSL --retry 3 "$MANIFEST_URL" -o "$TMP/stable.json"
 for item in updater updaterService appService; do
   url="$(jq -r ".assets.$item // empty" "$TMP/stable.json")"
+  sha="$(jq -r ".assets.${item}Sha256 // empty" "$TMP/stable.json")"
+  [[ "$url" == https://* && "$sha" =~ ^[a-fA-F0-9]{64}$ ]] || { echo "Invalid $item asset in stable manifest" >&2; exit 1; }
   case "$item" in updater) dest=/usr/local/lib/wfilemanager/update.sh;; updaterService) dest=/etc/systemd/system/wfilemanager-updater@.service;; appService) dest=/etc/systemd/system/wfilemanager.service;; esac
   curl -fsSL --retry 3 "$url" -o "$dest"
+  printf '%s  %s\n' "${sha,,}" "$dest" | sha256sum -c -
 done
-UPDATER_SHA="$(jq -r '.assets.updaterSha256' "$TMP/stable.json")"
-printf '%s  %s\n' "${UPDATER_SHA,,}" /usr/local/lib/wfilemanager/update.sh | sha256sum -c -
 chmod 750 /usr/local/lib/wfilemanager/update.sh
 
 systemctl stop wfilemanager.service 2>/dev/null || true
