@@ -22,6 +22,7 @@ exec 9>"$LOCK_FILE"
 flock -n 9 || { echo "Another wFileManager update is already running" >&2; exit 75; }
 
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+json_escape() { jq -Rn --arg value "$1" '$value'; }
 state() {
   local status="$1" progress="$2" message="$3" target="${4:-}" error="${5:-}"
   local current="" previous=""
@@ -97,14 +98,17 @@ install_release() {
   STARTED_AT="$(now)"
   state checking 5 "Checking the stable release channel"
   load_env
-  local tmp manifest archive expected actual release_url extract_root release_dir current
+  local tmp manifest archive expected actual release_url extract_root release_dir current expected_size actual_size product
   tmp="$(mktemp -d)"
   trap 'rm -rf "${tmp:-}"' EXIT
   manifest="$tmp/stable.json"
   curl -fsSL --retry 3 --connect-timeout 10 "$MANIFEST_URL" -o "$manifest" || fail "Unable to download the release manifest"
+  product="$(jq -r '.product // empty' "$manifest")"
   TARGET_VERSION="$(jq -r '.version // empty' "$manifest")"
   release_url="$(jq -r '.releaseUrl // .url // empty' "$manifest")"
   expected="$(jq -r '.sha256 // empty' "$manifest" | tr '[:upper:]' '[:lower:]')"
+  expected_size="$(jq -r '.size // 0' "$manifest")"
+  [[ "$product" == "wfilemanager" ]] || fail "The manifest is not a wFileManager release"
   [[ "$TARGET_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] || fail "The manifest contains an invalid version"
   [[ "$release_url" == https://* ]] || fail "The release URL must use HTTPS"
   [[ "$expected" =~ ^[a-f0-9]{64}$ ]] || fail "The manifest contains an invalid SHA-256 checksum"
@@ -126,7 +130,12 @@ install_release() {
   curl -fL --retry 3 --connect-timeout 15 --max-time 1800 "$release_url" -o "$archive" || fail "Release download failed"
   state verifying 42 "Verifying SHA-256 checksum" "$TARGET_VERSION"
   actual="$(sha256sum "$archive" | awk '{print $1}')"
+  actual_size="$(stat -c%s "$archive")"
   [[ "$actual" == "$expected" ]] || fail "Checksum mismatch: expected $expected, received $actual"
+  [[ "$expected_size" =~ ^[0-9]+$ && "$expected_size" -gt 0 && "$actual_size" -eq "$expected_size" ]] || fail "Release size mismatch: expected $expected_size bytes, received $actual_size"
+  if tar -tzf "$archive" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+    fail "The release archive contains an unsafe path"
+  fi
 
   release_dir="$RELEASES_DIR/$TARGET_VERSION"
   rm -rf "$release_dir"
