@@ -24,14 +24,14 @@ jobs:
           node-version: 24
       - run: mkdir -p "$CI_LOG_DIR"
       - run: bun install --frozen-lockfile
-      - name: Typecheck
-        id: typecheck
-        continue-on-error: true
-        run: bun run typecheck >"$CI_LOG_DIR/typecheck.log" 2>&1
       - name: Build
         id: build
         continue-on-error: true
         run: bun run build >"$CI_LOG_DIR/build.log" 2>&1
+      - name: Typecheck
+        id: typecheck
+        continue-on-error: true
+        run: bun run typecheck >"$CI_LOG_DIR/typecheck.log" 2>&1
       - name: Shell validation
         id: shell
         continue-on-error: true
@@ -49,9 +49,9 @@ jobs:
       - name: Enforce results
         if: always()
         run: |
-          cat "$CI_LOG_DIR/typecheck.log" || true
           cat "$CI_LOG_DIR/build.log" || true
+          cat "$CI_LOG_DIR/typecheck.log" || true
           cat "$CI_LOG_DIR/shell.log" || true
-          [[ "${{ steps.typecheck.outcome }}" == "success" ]]
           [[ "${{ steps.build.outcome }}" == "success" ]]
+          [[ "${{ steps.typecheck.outcome }}" == "success" ]]
           [[ "${{ steps.shell.outcome }}" == "success" ]]
