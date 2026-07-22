@@ -15,6 +15,7 @@ MANIFEST_URL="${WFILEMANAGER_UPDATE_MANIFEST_URL:-https://igihzeyfgwhnuiflamvn.s
 SERVICE="${WFILEMANAGER_SERVICE:-wfilemanager.service}"
 HEALTH_URL="${WFILEMANAGER_HEALTH_URL:-http://127.0.0.1:${PORT:-1973}/}"
 KEEP_RELEASES="${WFILEMANAGER_KEEP_RELEASES:-3}"
+ROOT_RESET_COMMAND="${WFILEMANAGER_ROOT_RESET_COMMAND:-/usr/local/sbin/wfilemanager-reset-admin-password}"
 
 mkdir -p "$RELEASES_DIR" "$STATE_DIR" "$CONFIG_DIR"
 chmod 700 "$STATE_DIR"
@@ -64,7 +65,7 @@ load_env() {
 health_check() {
   local tries=30
   while (( tries > 0 )); do
-    if curl -fsS --max-time 5 "$HEALTH_URL" >/dev/null; then return 0; fi
+    if curl -fsS --max-time 5 "$HEALTH_URL" >/dev/null 2>&1; then return 0; fi
     sleep 1
     ((tries--))
   done
@@ -79,6 +80,14 @@ activate_release() {
   fi
   ln -sfn "$release_dir" "$CURRENT_LINK.next"
   mv -Tf "$CURRENT_LINK.next" "$CURRENT_LINK"
+}
+
+install_release_commands() {
+  local release_dir="$1"
+  local reset_source="$release_dir/deploy/wfilemanager-reset-admin-password"
+  if [[ -f "$reset_source" ]]; then
+    install -m 700 "$reset_source" "$ROOT_RESET_COMMAND"
+  fi
 }
 
 build_release() {
@@ -118,10 +127,12 @@ install_release() {
   if [[ "${WFILEMANAGER_FORCE_UPDATE:-false}" != "true" ]]; then
     if [[ "$current" == "$TARGET_VERSION" ]]; then
       state completed 100 "wFileManager $TARGET_VERSION is already installed" "$TARGET_VERSION"
+      install_release_commands "$(readlink -f "$CURRENT_LINK")"
       exit 0
     fi
     if [[ -n "$current" ]] && dpkg --compare-versions "$TARGET_VERSION" le "$current"; then
       state completed 100 "No newer stable release is available" "$TARGET_VERSION"
+      install_release_commands "$(readlink -f "$CURRENT_LINK")"
       exit 0
     fi
   fi
@@ -155,6 +166,7 @@ install_release() {
   local old_release=""
   [[ -L "$CURRENT_LINK" ]] && old_release="$(readlink -f "$CURRENT_LINK")"
   activate_release "$release_dir"
+  install_release_commands "$release_dir"
   state restarting 92 "Restarting wFileManager" "$TARGET_VERSION"
   systemctl restart "$SERVICE" || true
   state health-check 96 "Running local health check" "$TARGET_VERSION"
@@ -163,6 +175,7 @@ install_release() {
       state rolling-back 97 "Health check failed; restoring the previous release" "$TARGET_VERSION"
       ln -sfn "$old_release" "$CURRENT_LINK.next"
       mv -Tf "$CURRENT_LINK.next" "$CURRENT_LINK"
+      install_release_commands "$old_release"
       systemctl restart "$SERVICE" || true
       health_check || fail "The update and automatic rollback both failed"
     fi
@@ -188,6 +201,7 @@ rollback_release() {
   state rolling-back 30 "Switching to wFileManager $TARGET_VERSION" "$TARGET_VERSION"
   ln -sfn "$previous" "$CURRENT_LINK.next"
   mv -Tf "$CURRENT_LINK.next" "$CURRENT_LINK"
+  install_release_commands "$previous"
   [[ -n "$current" ]] && printf '%s\n' "$current" > "$PREVIOUS_FILE"
   state restarting 70 "Restarting wFileManager" "$TARGET_VERSION"
   systemctl restart "$SERVICE" || true
