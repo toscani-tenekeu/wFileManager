@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  CI_LOG_DIR: ci-logs
+
 jobs:
   verify:
     runs-on: ubuntu-24.04
@@ -19,9 +22,36 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - run: mkdir -p "$CI_LOG_DIR"
       - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-      - run: bun run build
-      - run: bash -n deploy/install.sh
-      - run: bash -n deploy/uninstall.sh
-      - run: bash -n deploy/wfilemanager-reset-admin-password
+      - name: Typecheck
+        id: typecheck
+        continue-on-error: true
+        run: bun run typecheck >"$CI_LOG_DIR/typecheck.log" 2>&1
+      - name: Build
+        id: build
+        continue-on-error: true
+        run: bun run build >"$CI_LOG_DIR/build.log" 2>&1
+      - name: Shell validation
+        id: shell
+        continue-on-error: true
+        run: |
+          {
+            bash -n deploy/install.sh
+            bash -n deploy/uninstall.sh
+            bash -n deploy/wfilemanager-reset-admin-password
+          } >"$CI_LOG_DIR/shell.log" 2>&1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ci-logs
+          path: ci-logs
+      - name: Enforce results
+        if: always()
+        run: |
+          cat "$CI_LOG_DIR/typecheck.log" || true
+          cat "$CI_LOG_DIR/build.log" || true
+          cat "$CI_LOG_DIR/shell.log" || true
+          [[ "${{ steps.typecheck.outcome }}" == "success" ]]
+          [[ "${{ steps.build.outcome }}" == "success" ]]
+          [[ "${{ steps.shell.outcome }}" == "success" ]]
