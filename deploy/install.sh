@@ -9,6 +9,7 @@ ENABLE_SSL="${ENABLE_SSL:-auto}"
 APP_ROOT="/opt/wfilemanager"
 CONFIG_DIR="/etc/wfilemanager"
 ENV_FILE="$CONFIG_DIR/wfilemanager.env"
+ROOT_RESET_KEY_FILE="$CONFIG_DIR/root-reset.key"
 STATE_ROOT="/var/lib/wfilemanager"
 
 [[ $EUID -eq 0 ]] || { echo "Run this installer with sudo or as root." >&2; exit 1; }
@@ -20,8 +21,6 @@ dpkg --compare-versions "${VERSION_ID:-0}" ge 20.04 || { echo "Ubuntu 20.04 LTS 
 if [[ -z "$DOMAIN" && -r /dev/tty ]]; then
   read -r -p "Public domain (leave blank for server IP): " DOMAIN </dev/tty || true
 fi
-HOST_KEY="${DOMAIN:-$(hostname -f 2>/dev/null || hostname)}"
-INSTANCE_KEY="${WFILEMANAGER_INSTANCE_KEY:-wfm-$(printf '%s' "$HOST_KEY" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/-\+/-/g' | cut -c1-70)}"
 
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
@@ -40,10 +39,50 @@ export PATH="/root/.bun/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 install -d -m 755 "$APP_ROOT/releases" "$CONFIG_DIR" /usr/local/lib/wfilemanager
 install -d -m 700 "$STATE_ROOT/trash" "$STATE_ROOT/update"
 
-cat > "$ENV_FILE" <<ENV
+PUBLIC_IP=""
+for endpoint in https://api.ipify.org https://ipv4.icanhazip.com; do
+  candidate="$(curl -4fsS --max-time 5 "$endpoint" 2>/dev/null | tr -d '[:space:]' || true)"
+  if python3 - "$candidate" <<'PY' >/dev/null 2>&1
+import ipaddress
+import sys
+ipaddress.IPv4Address(sys.argv[1])
+PY
+  then
+    PUBLIC_IP="$candidate"
+    break
+  fi
+done
+LOCAL_IP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+HOSTNAME_VALUE="$(hostname -f 2>/dev/null || hostname)"
+
+EXISTING_INSTANCE_KEY=""
+if [[ -f "$ENV_FILE" ]]; then
+  EXISTING_INSTANCE_KEY="$(sed -n 's/^WFILEMANAGER_INSTANCE_KEY=//p' "$ENV_FILE" | tail -n 1)"
+fi
+
+if [[ -n "${WFILEMANAGER_INSTANCE_KEY:-}" ]]; then
+  INSTANCE_KEY="$WFILEMANAGER_INSTANCE_KEY"
+elif [[ -n "$EXISTING_INSTANCE_KEY" ]]; then
+  INSTANCE_KEY="$EXISTING_INSTANCE_KEY"
+else
+  INSTANCE_LABEL="${DOMAIN:-${PUBLIC_IP:-${LOCAL_IP:-$HOSTNAME_VALUE}}}"
+  INSTANCE_SLUG="$(printf '%s' "$INSTANCE_LABEL" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/-\+/-/g' | sed 's/^-//;s/-$//' | cut -c1-48)"
+  [[ -n "$INSTANCE_SLUG" ]] || INSTANCE_SLUG="server"
+  INSTANCE_KEY="wfm-${INSTANCE_SLUG}-$(openssl rand -hex 6)"
+fi
+
+if [[ ! -s "$ROOT_RESET_KEY_FILE" ]]; then
+  umask 077
+  openssl rand -hex 48 >"$ROOT_RESET_KEY_FILE"
+fi
+chmod 600 "$ROOT_RESET_KEY_FILE"
+ROOT_RESET_HASH="$(tr -d '\r\n' <"$ROOT_RESET_KEY_FILE" | sha256sum | awk '{print $1}')"
+
+cat >"$ENV_FILE" <<ENV
 PORT=$PORT
 VITE_SUPABASE_URL=$SUPABASE_URL
 VITE_WFILEMANAGER_INSTANCE_KEY=$INSTANCE_KEY
+VITE_WFILEMANAGER_ROOT_RESET_TOKEN_HASH=$ROOT_RESET_HASH
 WFILEMANAGER_SUPABASE_URL=$SUPABASE_URL
 WFILEMANAGER_INSTANCE_KEY=$INSTANCE_KEY
 WFILEMANAGER_ALLOW_PSEUDO_FS_WRITE=false
@@ -59,10 +98,10 @@ chmod 600 "$ENV_FILE"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 curl -fsSL --retry 3 "$MANIFEST_URL" -o "$TMP/stable.json"
-INSTALLER_ASSET="$(jq -r '.assets.updater // empty' "$TMP/stable.json")"
+UPDATER_ASSET="$(jq -r '.assets.updater // empty' "$TMP/stable.json")"
 UPDATER_SHA="$(jq -r '.assets.updaterSha256 // empty' "$TMP/stable.json")"
-[[ "$INSTALLER_ASSET" == https://* && "$UPDATER_SHA" =~ ^[a-fA-F0-9]{64}$ ]] || { echo "The stable manifest does not contain a valid updater asset." >&2; exit 1; }
-curl -fsSL --retry 3 "$INSTALLER_ASSET" -o /usr/local/lib/wfilemanager/update.sh
+[[ "$UPDATER_ASSET" == https://* && "$UPDATER_SHA" =~ ^[a-fA-F0-9]{64}$ ]] || { echo "The stable manifest does not contain a valid updater asset." >&2; exit 1; }
+curl -fsSL --retry 3 "$UPDATER_ASSET" -o /usr/local/lib/wfilemanager/update.sh
 printf '%s  %s\n' "${UPDATER_SHA,,}" /usr/local/lib/wfilemanager/update.sh | sha256sum -c -
 chmod 750 /usr/local/lib/wfilemanager/update.sh
 
@@ -81,12 +120,23 @@ systemctl enable wfilemanager.service
 
 /usr/local/lib/wfilemanager/update.sh install
 
-SERVER_NAME="${DOMAIN:-_}"
-cat > /etc/nginx/sites-available/wfilemanager <<NGINX
+if [[ -n "$DOMAIN" ]]; then
+  SERVER_NAMES="$DOMAIN"
+else
+  SERVER_NAMES="$(printf '%s %s %s' "$PUBLIC_IP" "$LOCAL_IP" "$HOSTNAME_VALUE" | xargs)"
+  if [[ -z "$SERVER_NAMES" ]]; then
+    SERVER_NAMES="_"
+    if [[ -L /etc/nginx/sites-enabled/default ]]; then
+      rm -f /etc/nginx/sites-enabled/default
+    fi
+  fi
+fi
+
+cat >/etc/nginx/sites-available/wfilemanager <<NGINX
 server {
     listen 80;
     listen [::]:80;
-    server_name $SERVER_NAME;
+    server_name $SERVER_NAMES;
     client_max_body_size 10G;
     location / {
         proxy_pass http://127.0.0.1:$PORT;
@@ -106,6 +156,7 @@ server {
 NGINX
 ln -sfn /etc/nginx/sites-available/wfilemanager /etc/nginx/sites-enabled/wfilemanager
 nginx -t
+systemctl enable --now nginx
 systemctl reload nginx
 
 if [[ -n "$DOMAIN" && "$ENABLE_SSL" != "false" ]]; then
@@ -119,7 +170,25 @@ if [[ -n "$DOMAIN" && "$ENABLE_SSL" != "false" ]]; then
   fi
 fi
 
+READY=false
+for attempt in $(seq 1 40); do
+  if systemctl is-active --quiet wfilemanager.service && curl -fsS --max-time 3 "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then
+    READY=true
+    break
+  fi
+  sleep 1
+done
+if [[ "$READY" != "true" ]]; then
+  journalctl -u wfilemanager.service -n 100 --no-pager >&2
+  echo "wFileManager did not become ready." >&2
+  exit 1
+fi
+
+OPEN_HOST="${DOMAIN:-${PUBLIC_IP:-${LOCAL_IP:-$HOSTNAME_VALUE}}}"
+OPEN_SCHEME="http"
+[[ -n "$DOMAIN" && "$ENABLE_SSL" != "false" ]] && OPEN_SCHEME="https"
+
 echo
 echo "wFileManager installation completed."
-if [[ -n "$DOMAIN" ]]; then echo "Open: https://$DOMAIN (or http://$DOMAIN until SSL is active)"; else echo "Open this server's IP address in a browser."; fi
+echo "Open: $OPEN_SCHEME://$OPEN_HOST"
 echo "Instance key: $INSTANCE_KEY"
