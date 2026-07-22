@@ -2,13 +2,14 @@
   "schema": 1,
   "product": "wfilemanager",
   "channel": "stable",
-  "version": "0.6.11",
-  "publishedAt": "2026-07-22T04:09:57Z",
+  "version": "0.6.12",
+  "publishedAt": "2026-07-22T06:04:34Z",
+  "sourceCommit": "9442fff04d421d43dc437893db5f15845245ac2f",
   "minimumVersion": "0.6.0",
-  "releaseUrl": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.6.11.tar.gz",
-  "url": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.6.11.tar.gz",
-  "sha256": "aea52fdb4d3437d54d2ca3074bc0256e393c906c2f829a78eb6fa31a33a8606e",
-  "size": 242048,
+  "releaseUrl": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.6.12.tar.gz",
+  "url": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.6.12.tar.gz",
+  "sha256": "f18d9e2eafb56fddfcbc24c0e506c0832c1d652df79657d6f506751248581711",
+  "size": 253855,
   "installUrl": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/install.sh",
   "canonicalBaseUrl": "https://releases.kmerhosting.com/wfilemanager",
   "githubUrl": "https://github.com/toscani-tenekeu/wFileManager",
@@ -18,13 +19,21 @@
     "architectures": [
       "amd64",
       "arm64"
+    ],
+    "virtualization": [
+      "bare-metal",
+      "KVM",
+      "LXC with systemd and root access"
     ]
   },
   "notes": [
-    "Simplifies archive extraction to one destination selector, one conflict selector and a single Extract action.",
-    "Replaces filesystem item counts on Overview with the real number of Linux login users.",
-    "Removes visible product logos and aligns the wFileManager name to the left.",
-    "Removes demo hostname, operating system and kernel details from first-run setup."
+    "Removes the public password-reset link from the sign-in screen.",
+    "Enforces the new administrator password policy.",
+    "Adds root-shell administrator password recovery support.",
+    "Simplifies archive extraction.",
+    "Replaces filesystem item counts with Linux login-user counts.",
+    "Removes visible product logos and refines KmerHosting branding.",
+    "Adds complete installation, contribution and security documentation."
   ],
   "assets": {
     "installer": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/install.sh",
