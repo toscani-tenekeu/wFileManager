@@ -12,6 +12,10 @@ import { toast } from "sonner";
 import { SERVER_INFO } from "@/lib/demo/data";
 import { useAuth } from "@/lib/auth";
 import { localApi } from "@/lib/local-api";
+import {
+  ADMIN_PASSWORD_POLICY_TEXT,
+  administratorPasswordError,
+} from "@/lib/admin-password-policy";
 
 export const Route = createFileRoute("/setup")({
   head: () => ({ meta: [{ title: "First-run setup — wFileManager" }] }),
@@ -38,13 +42,20 @@ function Setup() {
     confirm: "",
   });
   const current = STEPS[step];
+  const passwordError = form.password ? administratorPasswordError(form.password) : null;
+  const confirmationError = form.confirm && form.password !== form.confirm ? "Passwords do not match." : null;
 
   useEffect(() => {
     if (!auth.loading && auth.user) nav({ to: "/" });
     if (!auth.loading && auth.configured === true && !auth.user) nav({ to: "/login" });
   }, [auth.loading, auth.user, auth.configured, nav]);
 
-  const accountValid = form.name.trim() && form.username.trim().length >= 3 && form.password.length >= 8 && form.password === form.confirm;
+  const accountValid = Boolean(
+    form.name.trim()
+      && form.username.trim().length >= 3
+      && !administratorPasswordError(form.password)
+      && form.password === form.confirm,
+  );
 
   return (
     <AuthShell title="Set up wFileManager" desc="Create the first local administrator account.">
@@ -73,7 +84,9 @@ function Setup() {
             <div className="grid gap-1.5"><Label>Password</Label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
             <div className="grid gap-1.5"><Label>Confirm</Label><Input type="password" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} /></div>
           </div>
-          <p className="text-xs text-muted-foreground">Minimum 8 characters for the initial implementation.</p>
+          <p className={passwordError || confirmationError ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
+            {passwordError || confirmationError || ADMIN_PASSWORD_POLICY_TEXT}
+          </p>
         </div>
       )}
 
