@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { wfilemanagerApi, type AuthUser, type SetupPayload } from "./wfilemanager-api";
+import { setupWFileManager } from "./setup-api";
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -67,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setConfigured(true);
     },
     async setup(payload) {
-      await wfilemanagerApi.setup(payload);
+      await setupWFileManager(payload);
       const result = await wfilemanagerApi.login(payload.username, payload.password, true);
       wfilemanagerApi.setToken(result.token);
       setUser(await enrichUser(result.user));
