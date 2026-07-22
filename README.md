@@ -49,19 +49,25 @@ For VPS locations outside Germany, use an official Ubuntu mirror geographically 
 
 ### Database modes
 
-**KmerHosting managed Supabase**
+**KmerHosting managed Supabase — fastest setup and best for testing**
 
-Accounts, roles, sessions and notifications are stored in the Supabase project managed by KmerHosting. No Supabase key is requested.
+Supabase is automatically configured and no Supabase key is requested. Accounts, roles, sessions and notifications are stored remotely in the Supabase project managed by KmerHosting.
 
-**SQLite on this VPS**
+This mode provides the fastest installation and reduces the risk of losing application data if the VPS disk is lost or reinstalled. It is intended for quick deployment, evaluation and testing. Each server is limited to **100 MB of Supabase application data**.
 
-Application data is stored locally in:
+**SQLite on this VPS — recommended for long-term installations**
+
+SQLite keeps the application database entirely on your VPS and gives you full control over its storage, backups and retention. Application data is stored locally in:
 
 ```text
 /var/lib/wfilemanager/wfilemanager.db
 ```
 
-The SQLite database uses WAL mode, foreign keys and parameterized queries. Files managed through the explorer always remain on the VPS in both modes.
+Use SQLite for a durable production installation, preferably with your own domain and regular VPS backups. The database uses WAL mode, foreign keys and parameterized queries.
+
+For quick testing, use a free test subdomain and managed Supabase. For a long-term deployment, prefer your own domain and SQLite.
+
+Files managed through the explorer always remain on the VPS in both modes. The database choice only affects accounts, roles, sessions, notifications and related application records.
 
 After installation, open:
 
