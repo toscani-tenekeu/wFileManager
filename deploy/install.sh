@@ -19,6 +19,55 @@ INSTALL_STATE_FILE="$STATE_ROOT/install-state.env"
 [[ "${ID:-}" == "ubuntu" ]] || { echo "wFileManager currently supports Ubuntu only." >&2; exit 1; }
 dpkg --compare-versions "${VERSION_ID:-0}" ge 20.04 || { echo "Ubuntu 20.04 LTS or newer is required." >&2; exit 1; }
 
+systemd_failure() {
+  local phase="$1" state="${2:-unknown}"
+  cat >&2 <<TEXT
+
+The server system manager is not healthy ($phase; state: $state).
+wFileManager cannot safely install or manage services while systemd is unavailable.
+Reboot the VPS, wait for SSH to return, then run the same official install command again.
+The installer is idempotent and will reuse the selected domain, database mode and instance identity.
+TEXT
+  exit 1
+}
+
+check_systemd() {
+  local phase="$1" state=""
+  [[ "$(ps -p 1 -o comm= 2>/dev/null | tr -d '[:space:]')" == "systemd" ]] || systemd_failure "$phase" "PID 1 is not systemd"
+  timeout 12 systemctl show-environment >/dev/null 2>&1 || systemd_failure "$phase" "unresponsive"
+  state="$(timeout 12 systemctl is-system-running 2>/dev/null || true)"
+  if [[ "$state" == "starting" ]]; then
+    for _ in $(seq 1 15); do
+      sleep 2
+      state="$(timeout 12 systemctl is-system-running 2>/dev/null || true)"
+      [[ "$state" != "starting" ]] && break
+    done
+  fi
+  case "$state" in
+    running|degraded) ;;
+    *) systemd_failure "$phase" "${state:-unresponsive}" ;;
+  esac
+}
+
+run_systemctl() {
+  local description="$1"
+  shift
+  if ! timeout 45 systemctl "$@"; then
+    systemd_failure "$description" "unresponsive"
+  fi
+}
+
+valid_domain() {
+  python3 - "$1" <<'PY' >/dev/null 2>&1
+import re, sys
+value = sys.argv[1]
+if len(value) > 253 or not re.fullmatch(r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}", value):
+    raise SystemExit(1)
+PY
+}
+
+check_systemd "before installation"
+
 EXISTING_DOMAIN=""
 EXISTING_MODE=""
 EXISTING_INSTANCE_KEY=""
@@ -29,24 +78,30 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 DOMAIN="${DOMAIN:-$EXISTING_DOMAIN}"
-if [[ -z "$DOMAIN" ]]; then
-  [[ -r /dev/tty ]] || { echo "A domain is required. Run with DOMAIN=files.example.com." >&2; exit 1; }
-  cat >/dev/tty <<'TEXT'
+while true; do
+  DOMAIN="${DOMAIN,,}"
+  DOMAIN="${DOMAIN#"${DOMAIN%%[![:space:]]*}"}"
+  DOMAIN="${DOMAIN%"${DOMAIN##*[![:space:]]}"}"
+  if [[ -n "$DOMAIN" ]] && valid_domain "$DOMAIN"; then
+    break
+  fi
+  [[ -r /dev/tty ]] || { echo "A valid domain is required. Run with DOMAIN=files.example.com." >&2; exit 1; }
+  if [[ -z "$DOMAIN" ]]; then
+    cat >/dev/tty <<'TEXT'
 wFileManager requires a domain with an A record pointing to this server's public IPv4.
 Create the DNS record before continuing. Installation stops if DNS is not ready.
 TEXT
+  else
+    echo "The domain '$DOMAIN' is invalid. Enter a complete domain such as files.example.com." >/dev/tty
+  fi
   read -r -p "Domain (example: files.example.com): " DOMAIN </dev/tty
-fi
-DOMAIN="${DOMAIN,,}"
-python3 - "$DOMAIN" <<'PY' || { echo "The domain name is invalid." >&2; exit 1; }
-import re, sys
-value = sys.argv[1]
-if len(value) > 253 or not re.fullmatch(r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}", value):
-    raise SystemExit(1)
-PY
+  if [[ -z "$DOMAIN" ]]; then
+    echo "A domain is required. Press Ctrl+C to cancel." >/dev/tty
+  fi
+done
 
 DATABASE_MODE="${WFILEMANAGER_DATABASE_MODE:-$EXISTING_MODE}"
-if [[ -z "$DATABASE_MODE" ]]; then
+while [[ "$DATABASE_MODE" != "supabase" && "$DATABASE_MODE" != "sqlite" ]]; do
   [[ -r /dev/tty ]] || { echo "Choose WFILEMANAGER_DATABASE_MODE=supabase or sqlite." >&2; exit 1; }
   cat >/dev/tty <<'TEXT'
 
@@ -62,10 +117,9 @@ TEXT
   case "$DATABASE_CHOICE" in
     1) DATABASE_MODE="supabase" ;;
     2) DATABASE_MODE="sqlite" ;;
-    *) echo "Invalid database choice." >&2; exit 1 ;;
+    *) echo "Choose 1 or 2." >/dev/tty ;;
   esac
-fi
-[[ "$DATABASE_MODE" == "supabase" || "$DATABASE_MODE" == "sqlite" ]] || { echo "Database mode must be supabase or sqlite." >&2; exit 1; }
+done
 
 PUBLIC_IP=""
 for endpoint in https://api.ipify.org https://ipv4.icanhazip.com; do
@@ -105,8 +159,10 @@ for package in "${BASE_PACKAGES[@]}"; do
   dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q 'install ok installed' || echo "$package" >>"$TMP/packages-to-remove.txt"
 done
 
-apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y "${BASE_PACKAGES[@]}"
+APT_OPTIONS=(-o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60)
+apt-get "${APT_OPTIONS[@]}" update
+DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get "${APT_OPTIONS[@]}" install -y "${BASE_PACKAGES[@]}"
+check_systemd "after package installation"
 
 ADDED_NODESOURCE=false
 if ! command -v node >/dev/null 2>&1 || [[ "$(node -p 'Number(process.versions.node.split(`.`)[0])' 2>/dev/null || echo 0)" -lt 24 ]]; then
@@ -114,8 +170,9 @@ if ! command -v node >/dev/null 2>&1 || [[ "$(node -p 'Number(process.versions.n
   if ! dpkg-query -W -f='${Status}' nodejs 2>/dev/null | grep -q 'install ok installed'; then
     echo nodejs >>"$TMP/packages-to-remove.txt"
   fi
-  DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
+  DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get "${APT_OPTIONS[@]}" install -y nodejs
   ADDED_NODESOURCE=true
+  check_systemd "after Node.js installation"
 fi
 INSTALLED_BUN=false
 if ! command -v bun >/dev/null 2>&1; then
@@ -193,9 +250,14 @@ curl -fsSL --retry 3 "$UPDATER_SERVICE_URL" -o /etc/systemd/system/wfilemanager-
 curl -fsSL --retry 3 "$APP_SERVICE_URL" -o /etc/systemd/system/wfilemanager.service
 printf '%s  %s\n' "${UPDATER_SERVICE_SHA,,}" /etc/systemd/system/wfilemanager-updater@.service | sha256sum -c -
 printf '%s  %s\n' "${APP_SERVICE_SHA,,}" /etc/systemd/system/wfilemanager.service | sha256sum -c -
-systemctl daemon-reload
-systemctl enable wfilemanager.service
-/usr/local/lib/wfilemanager/update.sh install
+check_systemd "before service registration"
+run_systemctl "while reloading systemd" daemon-reload
+run_systemctl "while enabling wFileManager" enable wfilemanager.service
+if ! /usr/local/lib/wfilemanager/update.sh install; then
+  check_systemd "while installing the application release"
+  echo "The application release could not be installed. Rerun the same command after correcting the reported error." >&2
+  exit 1
+fi
 
 CURRENT_RELEASE="$(readlink -f "$APP_ROOT/current")"
 install -m 700 "$CURRENT_RELEASE/deploy/wfilemanager-reset-admin-password" /usr/local/sbin/wfilemanager-reset-admin-password
@@ -227,8 +289,8 @@ server {
 NGINX
 ln -sfn /etc/nginx/sites-available/wfilemanager /etc/nginx/sites-enabled/wfilemanager
 nginx -t
-systemctl enable --now nginx
-systemctl reload nginx
+run_systemctl "while starting Nginx" enable --now nginx
+run_systemctl "while reloading Nginx" reload nginx
 
 certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect || {
   echo "HTTPS setup failed. The application was installed but will not be considered ready without TLS." >&2
@@ -238,10 +300,14 @@ certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-w
 
 READY=false
 for attempt in $(seq 1 40); do
-  if systemctl is-active --quiet wfilemanager.service && curl -fsS --max-time 3 "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then READY=true; break; fi
+  if timeout 5 systemctl is-active --quiet wfilemanager.service && curl -fsS --max-time 3 "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then READY=true; break; fi
   sleep 1
 done
-[[ "$READY" == "true" ]] || { journalctl -u wfilemanager.service -n 100 --no-pager >&2; exit 1; }
+if [[ "$READY" != "true" ]]; then
+  timeout 15 journalctl -u wfilemanager.service -n 100 --no-pager >&2 || true
+  check_systemd "during the final health check"
+  exit 1
+fi
 
 echo
 echo "wFileManager installation completed."
