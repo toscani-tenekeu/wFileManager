@@ -17,6 +17,8 @@ wFileManager provides a web file explorer, archives, trash, storage analysis, us
 
 Installation by IP address or plain HTTP is not supported. The installer validates DNS before changing the server and configures HTTPS with Certbot.
 
+Do not have a domain or subdomain for testing? You can request a free test subdomain at [domain.kmerhosting.com](https://domain.kmerhosting.com). Point its A record to the VPS public IPv4 and wait for DNS propagation before installing.
+
 ## Install
 
 Create the DNS A record first, wait until it resolves to the VPS, then run:
@@ -29,6 +31,21 @@ The installer asks for:
 
 1. the domain;
 2. the database mode.
+
+### Slow Ubuntu package downloads
+
+The installer uses Ubuntu's configured APT mirror. Downloading package indexes can take several minutes. If the byte counter is still increasing, let it finish.
+
+If the download remains at exactly the same byte count for more than five minutes, the configured mirror may be slow. On an Ubuntu 24.04 VPS located in or near Germany, switch to the German mirror:
+
+```bash
+sudo sed -i 's|http://archive.ubuntu.com/ubuntu|http://de.archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+sudo apt-get clean
+```
+
+Then run the official installer again. It reuses the previously selected domain, database mode and instance identity. `apt-get clean` only clears downloaded package files; the speed improvement comes from using a closer or less congested mirror.
+
+For VPS locations outside Germany, use an official Ubuntu mirror geographically close to the server instead of `de.archive.ubuntu.com`.
 
 ### Database modes
 
