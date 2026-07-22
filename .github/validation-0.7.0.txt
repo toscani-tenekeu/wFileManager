@@ -1,0 +1,1 @@
+Temporary CI validation marker for the final wFileManager 0.7.0 source.
