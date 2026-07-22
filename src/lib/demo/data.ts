@@ -306,6 +306,6 @@ export const SERVER_INFO = {
   kernel: "6.8.0-45-generic",
   architecture: "x86_64",
   uptimeSeconds: 12 * 86400 + 4 * 3600 + 18 * 60,
-  wfmVersion: "0.6.11",
+  wfmVersion: "0.6.12",
   connection: "demonstration" as const,
 };
