@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   CircleCheck,
-  Files,
   FolderTree,
   HardDrive,
   MemoryStick,
@@ -12,7 +11,6 @@ import {
   Users,
 } from "lucide-react";
 import { localApi } from "@/lib/local-api";
-import { storageAnalysisApi, type StorageAnalysis } from "@/lib/storage-analysis-api";
 import { formatBytes } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,27 +42,19 @@ function Stat({ label, value, sub, icon: Icon }: { label: string; value: string;
 function Overview() {
   const [system, setSystem] = useState<SystemInfo | null>(null);
   const [trash, setTrash] = useState({ items: 0, size: 0 });
-  const [analysis, setAnalysis] = useState<StorageAnalysis | null>(null);
-  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = async (refreshAnalysis = false) => {
+  const load = async () => {
     setLoading(true);
     setError(null);
-    setAnalysisError(null);
     try {
-      const [systemResult, trashResult, analysisResult] = await Promise.all([
+      const [systemResult, trashResult] = await Promise.all([
         localApi.system(),
         localApi.trash.list().catch(() => ({ items: [], totalSize: 0 })),
-        storageAnalysisApi.get(refreshAnalysis).catch((cause) => {
-          setAnalysisError(cause instanceof Error ? cause.message : "Filesystem analysis is unavailable");
-          return null;
-        }),
       ]);
       setSystem(systemResult);
       setTrash({ items: trashResult.items.length, size: trashResult.totalSize });
-      setAnalysis(analysisResult);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to connect to the local wFileManager engine");
     } finally {
@@ -77,7 +67,6 @@ function Overview() {
   const diskPercent = system?.disk?.percent || 0;
   const memoryUsed = system ? system.memory.total - system.memory.free : 0;
   const memoryPercent = system?.memory.total ? Math.round((memoryUsed / system.memory.total) * 100) : 0;
-  const filesystemItems = analysis ? analysis.totalFiles + analysis.totalDirectories : 0;
 
   return (
     <div className="mx-auto w-full max-w-[1400px] p-4 sm:p-6 lg:p-8">
@@ -91,7 +80,7 @@ function Overview() {
             <span className={error ? "mr-1.5 h-1.5 w-1.5 rounded-full bg-destructive" : "mr-1.5 h-1.5 w-1.5 rounded-full bg-primary"} />
             {loading ? "Connecting" : error ? "Local engine unavailable" : "Local engine connected"}
           </Badge>
-          <Button size="icon" variant="outline" onClick={() => void load(true)}><RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} /></Button>
+          <Button size="icon" variant="outline" onClick={() => void load()}><RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} /></Button>
         </div>
       </div>
 
@@ -100,7 +89,7 @@ function Overview() {
       <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4">
         <Stat label="Root storage" value={system?.disk ? `${diskPercent}%` : "—"} sub={system?.disk ? `${formatBytes(system.disk.used)} of ${formatBytes(system.disk.total)}` : "Disk information unavailable"} icon={HardDrive} />
         <Stat label="Memory used" value={system ? `${memoryPercent}%` : "—"} sub={system ? `${formatBytes(memoryUsed)} of ${formatBytes(system.memory.total)}` : "Memory information unavailable"} icon={MemoryStick} />
-        <Stat label="Filesystem items" value={analysis ? filesystemItems.toLocaleString() : "—"} sub={analysis ? `${analysis.totalFiles.toLocaleString()} files · ${analysis.totalDirectories.toLocaleString()} folders across /` : analysisError ? "Filesystem scan unavailable" : "Scanning the root filesystem"} icon={Files} />
+        <Stat label="Server users" value={system ? system.loginUsers.toLocaleString() : "—"} sub={system ? "Linux accounts with login access" : "User information unavailable"} icon={Users} />
         <Stat label="Trash" value={loading ? "—" : String(trash.items)} sub={trash.items ? `${formatBytes(trash.size)} waiting for restore or deletion` : "Trash is empty"} icon={Trash2} />
       </div>
 

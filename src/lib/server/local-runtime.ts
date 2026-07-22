@@ -794,7 +794,26 @@ export async function systemSummary() {
   } catch {
     disk = null;
   }
+  let loginUsers = 0;
+  try {
+    const passwd = await readFile("/etc/passwd", "utf8");
+    loginUsers = passwd
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => line.split(":"))
+      .filter((parts) => {
+        const username = parts[0] || "";
+        const uid = Number(parts[2]);
+        const shell = parts[6] || "";
+        const interactiveShell = Boolean(shell) && !shell.endsWith("/nologin") && !shell.endsWith("/false");
+        return interactiveShell && (username === "root" || uid >= 1000);
+      })
+      .length;
+  } catch {
+    loginUsers = 0;
+  }
   return {
+    loginUsers,
     hostname: os.hostname(),
     platform: os.platform(),
     release: os.release(),
@@ -930,7 +949,7 @@ async function readUpdateState(currentVersion?: string): Promise<UpdateState> {
 }
 
 async function installedVersion() {
-  let currentVersion = process.env.WFILEMANAGER_VERSION || "0.6.10";
+  let currentVersion = process.env.WFILEMANAGER_VERSION || "0.6.11";
   try {
     const packageJson = JSON.parse(await readFile(path.join(process.cwd(), "package.json"), "utf8"));
     if (typeof packageJson.version === "string") currentVersion = packageJson.version;

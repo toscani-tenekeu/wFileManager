@@ -376,6 +376,7 @@ export const localApi = {
     },
   },
   system: () => get<{
+    loginUsers: number;
     hostname: string;
     platform: string;
     release: string;

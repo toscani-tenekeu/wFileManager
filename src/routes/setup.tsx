@@ -61,11 +61,6 @@ function Setup() {
       {current.key === "welcome" && (
         <Card><CardContent className="space-y-3 pt-6 text-sm">
           <p>This creates the first administrator for this wFileManager installation. The account is stored in standard prefixed tables, not Supabase Auth.</p>
-          <dl className="grid grid-cols-3 gap-y-1 text-xs">
-            <dt className="text-muted-foreground">Hostname</dt><dd className="col-span-2 font-mono">{SERVER_INFO.hostname}</dd>
-            <dt className="text-muted-foreground">Operating system</dt><dd className="col-span-2">{SERVER_INFO.os} {SERVER_INFO.version}</dd>
-            <dt className="text-muted-foreground">Kernel</dt><dd className="col-span-2 font-mono">{SERVER_INFO.kernel}</dd>
-          </dl>
         </CardContent></Card>
       )}
 

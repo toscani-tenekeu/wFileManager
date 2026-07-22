@@ -101,8 +101,7 @@ export function AppSidebar({ className }: { className?: string }) {
   return (
     <aside className={cn("flex h-full w-full shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:w-60", className)}>
       <div className="flex h-14 items-center gap-2 border-b border-sidebar-border px-4">
-        <img src="/wfilemanager-logo.png" alt="" className="h-8 w-8 shrink-0 object-contain" />
-        <div className="flex flex-col leading-tight"><span className="text-[10px] tracking-wide text-muted-foreground">From KmerHosting LLC</span><span className="text-sm font-semibold tracking-tight">wFileManager</span></div>
+<div className="flex flex-col leading-tight"><span className="text-[10px] tracking-wide text-muted-foreground">From KmerHosting LLC</span><span className="text-sm font-semibold tracking-tight">wFileManager</span></div>
       </div>
 
       <nav className="scroll-thin flex-1 overflow-y-auto px-2 py-3">

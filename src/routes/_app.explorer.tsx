@@ -190,6 +190,7 @@ function Explorer() {
   const [extractDestination, setExtractDestination] = useState("");
   const [extractFolderName, setExtractFolderName] = useState("");
   const [extractConflictPolicy, setExtractConflictPolicy] = useState<ConflictPolicy>("rename");
+  const [extractMode, setExtractMode] = useState<ExtractionMode>("current");
   const [operationProgress, setOperationProgress] = useState<{
     label: string;
     percent: number;
@@ -425,6 +426,7 @@ function Explorer() {
         setExtractDestination(inspection.destinationParent);
         setExtractFolderName(inspection.suggestedFolder);
         setExtractConflictPolicy("rename");
+        setExtractMode("current");
         setExtractPlan({ entry, inspection });
       } else {
         setOperationProgress({ label: `Extracting ${entry.name}`, percent: 35, detail: `Into ${inspection.destinationParent}` });
@@ -960,59 +962,77 @@ function Explorer() {
       </AlertDialog>
 
       <Dialog open={Boolean(extractPlan)} onOpenChange={(open) => !open && setExtractPlan(null)}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Archive extraction options</DialogTitle>
+            <DialogTitle>Extract archive</DialogTitle>
             <DialogDescription>
-              Choose how and where <span className="font-mono">{extractPlan?.entry.name}</span> should be extracted.
+              Choose the destination and how existing items should be handled.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             {extractPlan?.inspection.multipleTopLevel && (
               <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
-                <p className="font-medium">This archive has several items at its first level.</p>
-                <p className="mt-1 text-muted-foreground">Extracting here will place all of them directly in the destination directory.</p>
+                <p className="font-medium">Several first-level items will be extracted.</p>
+                <p className="mt-1 text-muted-foreground">Using the current directory will place them directly beside the archive.</p>
               </div>
             )}
 
             {(extractPlan?.inspection.defaultConflicts.length || 0) > 0 && (
               <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
-                <p className="font-medium">Existing destination items detected</p>
-                <p className="mt-1 font-mono text-xs text-muted-foreground">{extractPlan?.inspection.defaultConflicts.join(", ")}</p>
+                <p className="font-medium">Existing items were detected.</p>
+                <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{extractPlan?.inspection.defaultConflicts.join(", ")}</p>
               </div>
             )}
 
-            <div className="max-h-28 overflow-y-auto rounded-md border border-border bg-muted/25 p-2 font-mono text-xs">
-              {extractPlan?.inspection.topLevelItems.slice(0, 20).map((item) => <div key={item.name}>{item.kind === "directory" ? "folder" : "file"} · {item.name}</div>)}
-              {(extractPlan?.inspection.topLevelItems.length || 0) > 20 && <div>…and {(extractPlan?.inspection.topLevelItems.length || 0) - 20} more</div>}
+            <div className="grid gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Destination</label>
+              <select
+                value={extractMode}
+                onChange={(event) => setExtractMode(event.target.value as ExtractionMode)}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="current">Current directory</option>
+                <option value="folder">New folder</option>
+                <option value="custom">Other destination</option>
+              </select>
             </div>
 
-            <div>
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">When an item already exists</p>
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" size="sm" variant={extractConflictPolicy === "rename" ? "secondary" : "outline"} onClick={() => setExtractConflictPolicy("rename")}>Keep both · use (1), (2)…</Button>
-                <Button type="button" size="sm" variant={extractConflictPolicy === "overwrite" ? "destructive" : "outline"} onClick={() => setExtractConflictPolicy("overwrite")}>Replace existing</Button>
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="mb-1.5 block text-xs text-muted-foreground">New folder name</label>
+            {extractMode === "folder" && (
+              <div className="grid gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Folder name</label>
                 <Input value={extractFolderName} onChange={(event) => setExtractFolderName(event.target.value)} className="font-mono" />
               </div>
-              <div>
-                <label className="mb-1.5 block text-xs text-muted-foreground">Custom destination</label>
+            )}
+
+            {extractMode === "custom" && (
+              <div className="grid gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Destination path</label>
                 <Input value={extractDestination} onChange={(event) => setExtractDestination(event.target.value)} className="font-mono" />
               </div>
+            )}
+
+            <div className="grid gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Existing items</label>
+              <select
+                value={extractConflictPolicy}
+                onChange={(event) => setExtractConflictPolicy(event.target.value as ConflictPolicy)}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="rename">Keep both using (1), (2)…</option>
+                <option value="overwrite">Replace existing items</option>
+              </select>
             </div>
           </div>
 
-          <DialogFooter className="flex-wrap gap-2 sm:justify-end">
-            <Button variant="ghost" onClick={() => setExtractPlan(null)}>Cancel</Button>
-            <Button variant="outline" onClick={() => void confirmExtraction("current")}>Extract here</Button>
-            <Button variant="outline" onClick={() => void confirmExtraction("folder")}>Extract into new folder</Button>
-            <Button onClick={() => void confirmExtraction("custom")}>Extract to destination</Button>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExtractPlan(null)}>Cancel</Button>
+            <Button
+              disabled={(extractMode === "folder" && !extractFolderName.trim()) || (extractMode === "custom" && !extractDestination.trim())}
+              onClick={() => void confirmExtraction(extractMode)}
+            >
+              Extract
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
