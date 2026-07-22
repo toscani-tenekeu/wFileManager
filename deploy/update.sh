@@ -88,7 +88,7 @@ build_release() {
   export PATH="/root/.bun/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
   command -v bun >/dev/null 2>&1 || fail "Bun is not installed"
   state installing 62 "Installing dependencies" "$TARGET_VERSION"
-  bun install
+  bun install --frozen-lockfile
   state building 78 "Building wFileManager" "$TARGET_VERSION"
   bun run build
   bun run typecheck
