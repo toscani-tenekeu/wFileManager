@@ -16,7 +16,7 @@ export function AuthShell({
     <div className="grid min-h-screen bg-background lg:grid-cols-2">
       <div className="hidden flex-col justify-between border-r border-border bg-surface p-10 lg:flex">
         <Link to="/" className="flex items-center gap-2">
-          <img src="/favicon.svg" alt="" className="h-9 w-9 object-contain" />
+          <img src="/wfilemanager-logo.png" alt="" className="h-9 w-9 object-contain" />
           <div className="text-sm font-semibold">wFileManager</div>
         </Link>
         <div className="max-w-md">
@@ -34,7 +34,7 @@ export function AuthShell({
         <div className="w-full max-w-sm">
           <div className="mb-6 lg:hidden">
             <Link to="/" className="inline-flex items-center gap-2">
-              <img src="/favicon.svg" alt="" className="h-8 w-8 object-contain" />
+              <img src="/wfilemanager-logo.png" alt="" className="h-8 w-8 object-contain" />
               <span className="text-sm font-semibold">wFileManager</span>
             </Link>
           </div>
