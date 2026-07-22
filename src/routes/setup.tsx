@@ -9,7 +9,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CircleCheck, Server, User } from "lucide-react";
 import { toast } from "sonner";
-import { SERVER_INFO } from "@/lib/demo/data";
 import { useAuth } from "@/lib/auth";
 import { localApi } from "@/lib/local-api";
 import {
@@ -108,7 +107,6 @@ function Setup() {
             try {
               await auth.setup({
                 instanceName: "wFileManager",
-                hostname: SERVER_INFO.hostname,
                 displayName: form.name,
                 username: form.username,
                 email: form.email || undefined,
