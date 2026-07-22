@@ -1,49 +1,17 @@
 # Contributing to wFileManager
 
-Thank you for contributing to wFileManager.
+wFileManager is a privileged Linux administration application. Keep changes focused, reviewable and tested. Report suspected vulnerabilities privately according to [SECURITY.md](./SECURITY.md).
 
-wFileManager is a privileged server-administration application. Changes that look small in the interface can affect authentication, Linux permissions, filesystem safety, terminal execution, update integrity, and complete-server security. Contributions must therefore be narrow, reviewable, and tested.
+Never include production passwords, session tokens, recovery keys, Supabase secrets, SQLite databases, customer files or private server configuration.
 
-## Before contributing
+## Development
 
-Use the appropriate channel:
+Requirements:
 
-- Use a GitHub issue for confirmed bugs, feature proposals, documentation problems, and reproducible compatibility issues.
-- Use a pull request for a focused implementation that can be reviewed independently.
-- Do not open a public issue for a suspected vulnerability. Follow [SECURITY.md](./SECURITY.md).
-- Do not include passwords, session tokens, instance reset tokens, Supabase keys, private server addresses, customer data, or real production configuration in an issue or pull request.
-
-Search existing issues and pull requests before creating a duplicate.
-
-## Supported contribution areas
-
-Contributions are welcome for:
-
-- file-explorer behavior and accessibility;
-- archive creation and safe extraction;
-- uploads, downloads, previews, and editing;
-- storage and mount analysis;
-- Linux account and permission handling;
-- terminal reliability and safety;
-- authentication, sessions, roles, and notifications;
-- update verification and rollback;
-- Ubuntu compatibility;
-- tests, documentation, translations, and usability improvements.
-
-Large architectural rewrites should be discussed in an issue before implementation.
-
-## Development requirements
-
-Use:
-
-- Node.js 20 or newer;
-- Bun;
-- Python 3;
-- Linux for testing filesystem, terminal, systemd, user, archive, and permission behavior.
-
-Ubuntu 24.04 LTS is the recommended development and integration-test environment.
-
-## Local development
+- Node.js 24
+- Bun
+- Python 3
+- Linux; Ubuntu 24.04 LTS recommended
 
 ```bash
 git clone https://github.com/toscani-tenekeu/wFileManager.git
@@ -53,20 +21,19 @@ bun install
 bun run dev
 ```
 
-Do not point a development checkout at a production instance key or production database unless the work specifically requires it and you control the environment.
+Use a unique development instance key. Never point development at a production instance.
 
-Use a unique development instance key, for example:
+Choose a backend in `.env`:
 
 ```env
-VITE_WFILEMANAGER_INSTANCE_KEY=wfm-development-yourname
-WFILEMANAGER_INSTANCE_KEY=wfm-development-yourname
+VITE_WFILEMANAGER_DATABASE_MODE=sqlite
+WFILEMANAGER_DATABASE_MODE=sqlite
+WFILEMANAGER_SQLITE_PATH=./data/wfilemanager.db
 ```
 
-The browser-facing `VITE_` values are compiled into the application. Restart or rebuild after changing them.
+Use `supabase` to test the managed backend.
 
-## Required verification
-
-Before submitting a pull request, run:
+## Required checks
 
 ```bash
 bun run lint
@@ -74,165 +41,67 @@ bun run typecheck
 bun run build
 ```
 
-Also run focused manual tests for the modified area.
-
-Examples:
-
-- Explorer changes: test files, directories, hidden items, selection, keyboard actions, context menus, and error states.
-- Archive changes: test ZIP and TAR.GZ files, conflicts, several top-level entries, traversal attempts, links, and custom destinations.
-- Authentication changes: test first-run setup, login, logout, short and persistent sessions, invalid credentials, and revoked sessions.
-- Terminal changes: test normal-user commands, working-directory changes, cancellation, elevation, and rejected access.
-- Update changes: test checksum failure, invalid manifests, failed builds, health-check failure, rollback, and interrupted updates.
-- Storage changes: test regular disks, additional mounts, read-only filesystems, inaccessible mounts, and low-space conditions.
-
-A build that succeeds is not sufficient for privileged filesystem or authentication changes.
-
-## Branches and commits
-
-Create a focused branch from the current `main` branch.
-
-Recommended branch names:
-
-```text
-fix/archive-conflict-detection
-feat/storage-home-usage
-docs/security-reporting
-```
-
-Use clear imperative commit messages, for example:
-
-```text
-Fix archive conflict renaming
-Add inode warning state
-Document root password recovery
-```
-
-Avoid unrelated formatting or refactoring in the same commit as a behavioral fix.
+Also test the modified behavior manually. A successful build is not sufficient for authentication, filesystem, archive, terminal, installer or update changes.
 
 ## Coding rules
 
-- Keep TypeScript types explicit at trust boundaries.
-- Validate all client-controlled values on the server, even when the interface already validates them.
-- Normalize and validate filesystem paths before access.
-- Never construct shell commands by concatenating untrusted input.
-- Prefer argument arrays with `execFile` or equivalent APIs over shell interpolation.
-- Preserve the default blocks on writes to `/proc`, `/sys`, `/dev`, and `/run`.
-- Do not weaken archive traversal, absolute-path, link, or device-entry protections.
-- Do not expose the local Node.js port publicly.
-- Do not log passwords, session tokens, reset tokens, service-role keys, complete authorization headers, or sensitive file contents.
-- Keep session and notification data isolated by instance and user.
-- Revoke or invalidate sessions after security-sensitive password operations.
-- Preserve atomic update switching, checksum verification, health checks, and rollback behavior.
-- Keep persistent data outside versioned release directories.
-- Use existing UI primitives and design conventions before adding a new dependency.
-- Add a dependency only when the same result cannot reasonably be achieved with the existing stack.
+- Validate client-controlled input on the server.
+- Normalize filesystem paths before access.
+- Use argument arrays instead of interpolated shell commands.
+- Preserve blocks on writes to `/proc`, `/sys`, `/dev` and `/run`.
+- Preserve archive traversal, link and device-entry checks.
+- Keep port `1973` private and require HTTPS publicly.
+- Never log credentials, tokens or private file contents.
+- Revoke sessions after security-sensitive password operations.
+- Keep persistent data outside versioned releases.
+- Avoid new dependencies when the existing stack is sufficient.
 
-## Filesystem safety requirements
+## Database rules
 
-Changes involving paths, archives, trash, copy, move, extraction, upload, or download must consider:
+Both backends must expose equivalent application behavior.
 
-- absolute paths;
-- `..` traversal;
-- repeated separators and normalization;
-- symbolic links and link races;
-- hard links;
-- device and special files;
-- inaccessible paths;
-- mount boundaries;
-- name conflicts;
-- partial failure and cleanup;
-- very large files and output limits;
-- permission and ownership preservation;
-- cancellation and interrupted operations.
+For SQLite:
 
-Never remove a safety check merely to make a test pass. Correct the implementation or update the test with a documented reason.
+- use parameterized queries;
+- keep WAL mode and foreign keys enabled;
+- keep the database root-readable only;
+- add migrations for schema changes.
 
-## Authentication and password rules
+For managed Supabase:
 
-The initial administrator password and root recovery password must:
+- isolate every query by installation and user;
+- keep service-role keys inside trusted Edge Functions only;
+- use migrations for database changes.
 
-- contain at least 12 characters;
-- include uppercase and lowercase letters;
-- include at least one number;
-- contain only letters and numbers;
-- not contain identical consecutive characters.
+## Installer and uninstaller rules
 
-Client-side validation is for usability only. The authoritative validation must remain on the server.
-
-Do not add a public password-reset link without a complete, reviewed recovery design. The supported recovery mechanism is the root-only server command.
-
-## Database and Supabase changes
-
-- Prefix project-specific database objects with `wfilemanager_`.
-- Use migrations for schema changes.
-- Do not hardcode generated database IDs.
-- Keep instance isolation in every query.
-- Keep user ownership checks for private resources.
-- Use service-role credentials only in trusted server or Edge Function environments.
-- Never place a service-role key in browser code, committed files, examples, screenshots, or logs.
-- Document migration and rollback implications in the pull request.
-
-## Update and release changes
-
-Release publishing is restricted to maintainers.
-
-A release-related contribution must preserve:
-
-- HTTPS asset URLs;
-- SHA-256 verification;
-- release-size verification;
-- safe archive-path validation;
-- versioned installation directories;
-- atomic symlink switching;
-- post-start health checks;
-- automatic rollback;
-- persistent configuration and data directories.
-
-Do not commit `.output/`, `node_modules/`, private `.env` files, release secrets, or generated production credentials.
-
-## Documentation changes
-
-Documentation must describe current behavior rather than planned behavior. Commands should be directly usable and should clearly state when root privileges, a domain, HTTPS, or a destructive action is involved.
-
-Keep the standard user installation path simple:
+The normal installation command must remain:
 
 ```bash
 curl -fsSL https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/install.sh | sudo bash
 ```
 
-Advanced development, migration, and release-maintenance commands should not replace the normal installation instructions.
+The installer must validate the domain's A record, configure HTTPS, offer managed Supabase or local SQLite, verify release checksums and finish only after a successful health check.
 
-## Pull-request requirements
+The uninstaller must clearly distinguish between removing the application and data while keeping packages, and a full removal including packages installed by wFileManager.
+
+## Pull requests
 
 A pull request should include:
 
-- a concise description of the problem;
-- the implemented solution;
-- the affected security or privilege boundaries;
-- test commands and manual test results;
-- screenshots for visible interface changes;
-- migration notes when persistent data changes;
-- rollback notes for update, schema, or deployment changes;
-- known limitations or follow-up work.
+- the problem and solution;
+- affected privilege or security boundaries;
+- test commands and results;
+- screenshots for visible changes;
+- database migration and rollback notes when relevant.
 
-Keep pull requests small enough to review. A reviewer may request that unrelated changes be split into separate pull requests.
+Checklist:
 
-## Pull-request checklist
-
-- [ ] The change has a single clear purpose.
 - [ ] No secrets or production data are included.
-- [ ] `bun run lint` passes.
-- [ ] `bun run typecheck` passes.
-- [ ] `bun run build` passes.
-- [ ] Relevant manual tests were completed.
-- [ ] Trust-boundary validation exists on the server.
-- [ ] Filesystem and archive safety checks remain intact.
-- [ ] Authentication and instance isolation remain intact.
-- [ ] Documentation was updated when behavior changed.
-- [ ] The change is compatible with the MIT License.
+- [ ] Lint, typecheck and build pass.
+- [ ] Relevant manual tests pass.
+- [ ] Filesystem and archive protections remain intact.
+- [ ] Both database modes were considered.
+- [ ] Documentation matches current behavior.
 
-## Review and acceptance
-
-Submitting a contribution does not guarantee acceptance. Maintainers may reject changes that increase the privileged attack surface without sufficient benefit, duplicate existing functionality, weaken security controls, introduce unnecessary dependencies, or are not maintainable within the project scope.
-
-By contributing, you agree that your contribution is provided under the project’s [MIT License](./LICENSE).
+Contributions are provided under the project's MIT License.
