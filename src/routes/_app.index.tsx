@@ -23,6 +23,10 @@ export const Route = createFileRoute("/_app/")({
 });
 
 type SystemInfo = Awaited<ReturnType<typeof localApi.system>>;
+type OverviewDisk = NonNullable<SystemInfo["disk"]> & {
+  capacityReliable?: boolean;
+  measurement?: "configured" | "filesystem" | "server-usage";
+};
 
 function Stat({ label, value, sub, icon: Icon }: { label: string; value: string; sub: string; icon: React.ComponentType<{ className?: string }> }) {
   return (
@@ -64,9 +68,22 @@ function Overview() {
 
   useEffect(() => { void load(); }, []);
 
-  const diskPercent = system?.disk?.percent || 0;
+  const disk = system?.disk as OverviewDisk | null | undefined;
+  const hasReliableDiskCapacity = Boolean(disk && disk.capacityReliable !== false && disk.total > 0);
+  const diskPercent = hasReliableDiskCapacity ? disk?.percent || 0 : 0;
   const memoryUsed = system ? system.memory.total - system.memory.free : 0;
   const memoryPercent = system?.memory.total ? Math.round((memoryUsed / system.memory.total) * 100) : 0;
+
+  const storageValue = disk
+    ? hasReliableDiskCapacity
+      ? `${diskPercent}%`
+      : formatBytes(disk.used)
+    : "—";
+  const storageDescription = disk
+    ? hasReliableDiskCapacity
+      ? `${formatBytes(disk.used)} of ${formatBytes(disk.total)}`
+      : "Used by this server; no external capacity shown"
+    : "Storage information unavailable";
 
   return (
     <div className="mx-auto w-full max-w-[1400px] p-4 sm:p-6 lg:p-8">
@@ -87,7 +104,7 @@ function Overview() {
       {error && <Card className="mb-4 border-destructive/40"><CardContent className="pt-6 text-sm text-destructive">{error}</CardContent></Card>}
 
       <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Root storage" value={system?.disk ? `${diskPercent}%` : "—"} sub={system?.disk ? `${formatBytes(system.disk.used)} of ${formatBytes(system.disk.total)}` : "Disk information unavailable"} icon={HardDrive} />
+        <Stat label="Server storage" value={storageValue} sub={storageDescription} icon={HardDrive} />
         <Stat label="Memory used" value={system ? `${memoryPercent}%` : "—"} sub={system ? `${formatBytes(memoryUsed)} of ${formatBytes(system.memory.total)}` : "Memory information unavailable"} icon={MemoryStick} />
         <Stat label="Server users" value={system ? system.loginUsers.toLocaleString() : "—"} sub={system ? "Linux accounts with login access" : "User information unavailable"} icon={Users} />
         <Stat label="Trash" value={loading ? "—" : String(trash.items)} sub={trash.items ? `${formatBytes(trash.size)} waiting for restore or deletion` : "Trash is empty"} icon={Trash2} />
@@ -104,8 +121,19 @@ function Overview() {
               <div><p className="text-xs text-muted-foreground">Service port</p><p className="mt-1 font-mono">127.0.0.1:1973</p></div>
             </div>
             <div>
-              <div className="mb-1.5 flex justify-between text-xs"><span className="text-muted-foreground">Disk usage</span><span className="font-mono">{system?.disk ? `${formatBytes(system.disk.available)} available` : "—"}</span></div>
-              <Progress value={diskPercent} className="h-2" />
+              <div className="mb-1.5 flex justify-between text-xs">
+                <span className="text-muted-foreground">{hasReliableDiskCapacity ? "Storage usage" : "Server data stored"}</span>
+                <span className="font-mono">
+                  {disk ? hasReliableDiskCapacity ? `${formatBytes(disk.available)} available` : `${formatBytes(disk.used)} measured locally` : "—"}
+                </span>
+              </div>
+              {hasReliableDiskCapacity ? (
+                <Progress value={diskPercent} className="h-2" />
+              ) : (
+                <p className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                  This server environment does not expose a reliable storage capacity limit. wFileManager shows measured usage and hides external filesystem totals.
+                </p>
+              )}
             </div>
             <div>
               <div className="mb-1.5 flex justify-between text-xs"><span className="text-muted-foreground">Memory usage</span><span className="font-mono">{system ? `${formatBytes(system.memory.free)} free` : "—"}</span></div>
