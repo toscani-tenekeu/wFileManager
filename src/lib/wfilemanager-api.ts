@@ -1,5 +1,7 @@
 const PROJECT_URL =
   import.meta.env.VITE_SUPABASE_URL || "https://igihzeyfgwhnuiflamvn.supabase.co";
+const DATABASE_MODE =
+  import.meta.env.VITE_WFILEMANAGER_DATABASE_MODE === "sqlite" ? "sqlite" : "supabase";
 const API_URL = `${PROJECT_URL}/functions/v1/wfilemanager-api`;
 const ROLES_API_URL = `${PROJECT_URL}/functions/v1/wfilemanager-roles-api`;
 const NOTIFICATIONS_API_URL = `${PROJECT_URL}/functions/v1/wfilemanager-notifications-api`;
@@ -38,7 +40,6 @@ export interface WFileManagerRole {
   updatedAt: string;
 }
 
-
 export interface WFileManagerNotification {
   id: string;
   title: string;
@@ -71,14 +72,23 @@ export interface SetupPayload {
   password: string;
 }
 
-async function request<T>(action: string, init: RequestInit = {}): Promise<T> {
-  const token = typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
-  const response = await fetch(`${API_URL}/${action}`, {
+function token() {
+  return typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
+}
+
+function sqliteUrl(scope: string, action: string) {
+  const query = new URLSearchParams({ scope, action });
+  return `/api/sqlite?${query}`;
+}
+
+async function perform<T>(url: string, init: RequestInit = {}): Promise<T> {
+  const sessionToken = token();
+  const response = await fetch(url, {
     ...init,
     headers: {
       "Content-Type": "application/json",
       "x-wfilemanager-instance": INSTANCE_KEY,
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
       ...(init.headers || {}),
     },
   });
@@ -87,53 +97,28 @@ async function request<T>(action: string, init: RequestInit = {}): Promise<T> {
   return payload as T;
 }
 
-async function rolesRequest<T>(action: string, init: RequestInit = {}): Promise<T> {
-  const token = typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
-  const response = await fetch(`${ROLES_API_URL}/${action}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      "x-wfilemanager-instance": INSTANCE_KEY,
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init.headers || {}),
-    },
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`);
-  return payload as T;
+function request<T>(action: string, init: RequestInit = {}) {
+  return perform<T>(DATABASE_MODE === "sqlite" ? sqliteUrl("auth", action) : `${API_URL}/${action}`, init);
 }
 
-
-async function externalRequest<T>(baseUrl: string, action: string, init: RequestInit = {}): Promise<T> {
-  const token = typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
-  const response = await fetch(`${baseUrl}/${action}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      "x-wfilemanager-instance": INSTANCE_KEY,
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init.headers || {}),
-    },
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`);
-  return payload as T;
+function rolesRequest<T>(action: string, init: RequestInit = {}) {
+  return perform<T>(DATABASE_MODE === "sqlite" ? sqliteUrl("roles", action) : `${ROLES_API_URL}/${action}`, init);
 }
 
-async function notificationsRequest<T>(init: RequestInit = {}): Promise<T> {
-  const token = typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
-  const response = await fetch(`${NOTIFICATIONS_API_URL}/notifications`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      "x-wfilemanager-instance": INSTANCE_KEY,
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init.headers || {}),
-    },
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`);
-  return payload as T;
+function accountRequest<T>(action: string, init: RequestInit = {}) {
+  return perform<T>(DATABASE_MODE === "sqlite" ? sqliteUrl("account", action) : `${ACCOUNT_API_URL}/${action}`, init);
+}
+
+function usersAdminRequest<T>(action: string, init: RequestInit = {}) {
+  return perform<T>(DATABASE_MODE === "sqlite" ? sqliteUrl("auth", action) : `${USERS_ADMIN_API_URL}/${action}`, init);
+}
+
+function presenceRequest<T>(action: string, init: RequestInit = {}) {
+  return perform<T>(DATABASE_MODE === "sqlite" ? sqliteUrl("presence", action) : `${PRESENCE_API_URL}/${action}`, init);
+}
+
+function notificationsRequest<T>(init: RequestInit = {}) {
+  return perform<T>(DATABASE_MODE === "sqlite" ? sqliteUrl("notifications", "notifications") : `${NOTIFICATIONS_API_URL}/notifications`, init);
 }
 
 function signalNotificationsChanged() {
@@ -143,24 +128,25 @@ function signalNotificationsChanged() {
 }
 
 export const wfilemanagerApi = {
-  getToken: () => (typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null),
-  setToken: (token: string) => localStorage.setItem(TOKEN_KEY, token),
+  databaseMode: DATABASE_MODE,
+  getToken: token,
+  setToken: (value: string) => localStorage.setItem(TOKEN_KEY, value),
   clearToken: () => localStorage.removeItem(TOKEN_KEY),
-  status: () => request<{ configured: boolean; instance?: { id: string; name: string; hostname?: string } }>("status"),
+  status: () => request<{ configured: boolean; instance?: { id: string; name: string; hostname?: string; databaseMode?: string } }>("status"),
   setup: (data: SetupPayload) => request<{ success: true; user: AuthUser }>("setup", { method: "POST", body: JSON.stringify(data) }),
   login: (login: string, password: string, remember: boolean) => request<{ token: string; expiresAt: string; user: AuthUser }>("login", { method: "POST", body: JSON.stringify({ login, password, remember }) }),
-  me: () => request<{ user: AuthUser; instance: { id: string; name: string; hostname?: string } }>("me"),
+  me: () => request<{ user: AuthUser; instance: { id: string; name: string; hostname?: string; databaseMode?: string } }>("me"),
   logout: () => request<{ success: true }>("logout", { method: "POST" }),
   users: () => request<{ users: AuthUser[] }>("users"),
   createUser: (data: { displayName: string; username: string; email?: string; password: string; roleId?: string; status?: string; mustChangePassword?: boolean }) =>
     request<{ user: AuthUser }>("users", { method: "POST", body: JSON.stringify(data) }),
-  deleteUser: (id: string) => externalRequest<{ success: true; deleted: { id: string; username: string; displayName: string } }>(USERS_ADMIN_API_URL, "users", { method: "DELETE", body: JSON.stringify({ id }) }),
-  accountProfile: () => externalRequest<{ user: AuthUser }>(ACCOUNT_API_URL, "profile"),
-  updateAccountProfile: (data: { displayName: string; email?: string | null; timezone: string }) => externalRequest<{ user: AuthUser }>(ACCOUNT_API_URL, "profile", { method: "PATCH", body: JSON.stringify(data) }),
-  changePassword: (currentPassword: string, newPassword: string) => externalRequest<{ success: true }>(ACCOUNT_API_URL, "password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) }),
-  accountSessions: () => externalRequest<{ sessions: WFileManagerSession[] }>(ACCOUNT_API_URL, "sessions"),
-  revokeSession: (id: string) => externalRequest<{ success: true; currentRevoked: boolean }>(ACCOUNT_API_URL, "sessions", { method: "DELETE", body: JSON.stringify({ id }) }),
-  revokeAllSessions: () => externalRequest<{ success: true; currentRevoked: true }>(ACCOUNT_API_URL, "sessions", { method: "DELETE", body: JSON.stringify({ all: true }) }),
+  deleteUser: (id: string) => usersAdminRequest<{ success: true; deleted: { id: string; username: string; displayName: string } }>("users", { method: "DELETE", body: JSON.stringify({ id }) }),
+  accountProfile: () => accountRequest<{ user: AuthUser }>("profile"),
+  updateAccountProfile: (data: { displayName: string; email?: string | null; timezone: string }) => accountRequest<{ user: AuthUser }>("profile", { method: "PATCH", body: JSON.stringify(data) }),
+  changePassword: (currentPassword: string, newPassword: string) => accountRequest<{ success: true }>("password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) }),
+  accountSessions: () => accountRequest<{ sessions: WFileManagerSession[] }>("sessions"),
+  revokeSession: (id: string) => accountRequest<{ success: true; currentRevoked: boolean }>("sessions", { method: "DELETE", body: JSON.stringify({ id }) }),
+  revokeAllSessions: () => accountRequest<{ success: true; currentRevoked: true }>("sessions", { method: "DELETE", body: JSON.stringify({ all: true }) }),
   rolePermissions: () => rolesRequest<{ roleId: string | null; roleName: string | null; permissions: string[] }>("permissions"),
   roles: () => rolesRequest<{ roles: WFileManagerRole[] }>("roles"),
   createRole: (data: { name: string; description?: string; permissions: string[] }) =>
@@ -194,5 +180,5 @@ export const wfilemanagerApi = {
     signalNotificationsChanged();
     return result;
   },
-  onlineUsers: () => externalRequest<{ onlineUsers: number; onlineWindowSeconds: number; checkedAt: string }>(PRESENCE_API_URL, "presence"),
+  onlineUsers: () => presenceRequest<{ onlineUsers: number; onlineWindowSeconds: number; checkedAt: string }>("presence"),
 };
