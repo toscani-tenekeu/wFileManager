@@ -16,6 +16,7 @@ SERVICE="${WFILEMANAGER_SERVICE:-wfilemanager.service}"
 HEALTH_URL="${WFILEMANAGER_HEALTH_URL:-http://127.0.0.1:${PORT:-1973}/}"
 KEEP_RELEASES="${WFILEMANAGER_KEEP_RELEASES:-3}"
 ROOT_RESET_COMMAND="${WFILEMANAGER_ROOT_RESET_COMMAND:-/usr/local/sbin/wfilemanager-reset-admin-password}"
+UNINSTALL_COMMAND="${WFILEMANAGER_UNINSTALL_COMMAND:-/usr/local/sbin/wfilemanager-uninstall}"
 
 mkdir -p "$RELEASES_DIR" "$STATE_DIR" "$CONFIG_DIR"
 chmod 700 "$STATE_DIR"
@@ -85,8 +86,12 @@ activate_release() {
 install_release_commands() {
   local release_dir="$1"
   local reset_source="$release_dir/deploy/wfilemanager-reset-admin-password"
+  local uninstall_source="$release_dir/deploy/uninstall.sh"
   if [[ -f "$reset_source" ]]; then
     install -m 700 "$reset_source" "$ROOT_RESET_COMMAND"
+  fi
+  if [[ -f "$uninstall_source" ]]; then
+    install -m 700 "$uninstall_source" "$UNINSTALL_COMMAND"
   fi
 }
 
