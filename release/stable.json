@@ -2,13 +2,13 @@
   "schema": 1,
   "product": "wfilemanager",
   "channel": "stable",
-  "version": "0.6.7",
-  "publishedAt": "2026-07-22T00:30:00Z",
+  "version": "0.6.11",
+  "publishedAt": "2026-07-22T04:09:57Z",
   "minimumVersion": "0.6.0",
-  "releaseUrl": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.6.7.tar.gz",
-  "url": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.6.7.tar.gz",
-  "sha256": "beea0d0d5152bdabb4cb07537f07727a12db183a4fea1fbee50ed5bdede4d210",
-  "size": 209120,
+  "releaseUrl": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.6.11.tar.gz",
+  "url": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.6.11.tar.gz",
+  "sha256": "aea52fdb4d3437d54d2ca3074bc0256e393c906c2f829a78eb6fa31a33a8606e",
+  "size": 242048,
   "installUrl": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/install.sh",
   "canonicalBaseUrl": "https://releases.kmerhosting.com/wfilemanager",
   "githubUrl": "https://github.com/toscani-tenekeu/wFileManager",
@@ -21,20 +21,21 @@
     ]
   },
   "notes": [
-    "Fixes installation when bun.lock needs regeneration.",
-    "Uses Bun to resolve and refresh dependencies during installation before the verified production build.",
-    "Preserves verified downloads, atomic activation, health checks and rollback."
+    "Simplifies archive extraction to one destination selector, one conflict selector and a single Extract action.",
+    "Replaces filesystem item counts on Overview with the real number of Linux login users.",
+    "Removes visible product logos and aligns the wFileManager name to the left.",
+    "Removes demo hostname, operating system and kernel details from first-run setup."
   ],
   "assets": {
     "installer": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/install.sh",
     "installerSha256": "2e4f9f3a32e33460ceec3c812b6e45eb1eb89cb3465e976813fdbf9f089b2bbc",
     "updater": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/update.sh",
-    "updaterSha256": "1868ea258c5c64488736529106c9fbf7d06f2f0610ee562c65f59d5e98b6020e",
+    "updaterSha256": "97f0f7d372fa8b2ff03075f83b0c27c609a81675b9db64133d6e4cf68da3170b",
     "appService": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager.service",
     "appServiceSha256": "d50b7e29ad60f32c5e2dfa9cf86d422e1b36c71d36fa3680c45799f529541251",
     "updaterService": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-updater@.service",
     "updaterServiceSha256": "b9a9dabcbebafa5c34f19c01fd91591093b9e2a76db71ec342433dd7da77ffa4",
     "migrationPatch": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/migrate-existing-vps.sh",
-    "migrationPatchSha256": "62af4c271d5683a19105a02dc556484745e417a6deb9b76b36448cbe99a752ea"
+    "migrationPatchSha256": "76845add5fc558df54d6270cfe4622853d85a26063edbddbc22ac66f695730f7"
   }
 }
