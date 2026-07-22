@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -69,8 +69,6 @@ function About() {
     } finally { setStarting(false); }
   };
 
-  const notes = useMemo(() => update?.notes?.split("\n").filter(Boolean) || [], [update?.notes]);
-
   return (
     <div className="mx-auto w-full max-w-3xl p-6">
       <div className="mb-6 flex items-center gap-3">
@@ -124,8 +122,6 @@ function About() {
           {user?.isAdmin && update?.rollbackAvailable && !active && (
             <AlertDialog><AlertDialogTrigger asChild><Button size="sm" variant="outline" disabled={starting}><RotateCcw className="mr-2 h-4 w-4" /> Roll back</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Roll back to the previous release?</AlertDialogTitle><AlertDialogDescription>The current release will be replaced by the previous verified release and the service will restart.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => void rollback()}>Start rollback</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
           )}
-
-          {notes.length > 0 && <div className="rounded-md border border-border bg-muted/30 p-3"><p className="mb-2 text-sm font-medium">Release notes</p><ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">{notes.map((note) => <li key={note}>{note}</li>)}</ul></div>}
         </CardContent>
       </Card>
 
