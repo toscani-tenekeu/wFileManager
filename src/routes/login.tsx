@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,9 +34,6 @@ function LoginPage() {
     <AuthShell
       title="Sign in"
       desc="Access your wFileManager administration panel."
-      footer={
-        <Link to="/forgot-password" className="hover:text-foreground">Forgot password?</Link>
-      }
     >
       {err && <Alert variant="destructive" className="mb-4"><AlertDescription>{err}</AlertDescription></Alert>}
       <form
