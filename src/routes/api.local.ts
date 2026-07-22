@@ -9,6 +9,10 @@ async function runtime() {
   return import("@/lib/server/local-runtime");
 }
 
+async function systemRuntime() {
+  return import("@/lib/server/system-runtime");
+}
+
 async function analysisRuntime() {
   return import("@/lib/server/storage-analysis");
 }
@@ -38,7 +42,8 @@ export const Route = createFileRoute("/api/local")({
 
           if (action === "system") {
             await api.requireUser(request);
-            return json(await api.systemSummary());
+            const system = await systemRuntime();
+            return json(await system.systemSummary());
           }
           if (action === "storage") {
             await api.requireUser(request);
