@@ -8,7 +8,11 @@ wFileManager is a web-based administration interface for managing files on an Ub
 
 - Browse the Linux filesystem from `/`
 - List and mosaic file layouts
+- Multiple selection with Ctrl/Command, Shift and selection checkboxes
+- Right-click context menus for files and directories
 - File and directory creation, upload, download, rename, copy, move and deletion
+- ZIP and TAR.GZ directory creation in the current directory
+- Secure ZIP and TAR.GZ inspection and extraction with multi-item warnings
 - Transfer progress and cancellation
 - Text-file preview and editing
 - File properties and octal permission changes
@@ -20,6 +24,7 @@ wFileManager is a web-based administration interface for managing files on an Ub
 - Account profile, password and active-session management
 - Private persistent notifications
 - Real storage capacity, available space, mounts and inode usage
+- Filesystem item distribution, file-type inventory and Linux home-directory usage
 - Online-user presence reporting
 - Stable updates with SHA-256 verification, health checks and automatic rollback
 
@@ -30,6 +35,7 @@ wFileManager is a web-based administration interface for managing files on an Ub
 - `amd64` or `arm64`
 - Node.js 20 or newer
 - Bun
+- Python 3
 
 ## Installation
 
@@ -112,9 +118,10 @@ The systemd service runs as `root` because the application must manage system fi
 
 Writes to `/proc`, `/sys`, `/dev` and `/run` are blocked by default. Enabling `WFILEMANAGER_ALLOW_PSEUDO_FS_WRITE=true` is not recommended.
 
+Archive extraction rejects absolute paths, parent-directory traversal, symbolic links, hard links and device entries. Extraction into the current directory is blocked when top-level targets already exist.
+
 ## Current limitations
 
-- Archive creation and extraction
 - Advanced ACL and recursive ownership editing
 - Path-specific role restrictions enforced by the local filesystem engine
 - Resumable uploads after browser or network interruption

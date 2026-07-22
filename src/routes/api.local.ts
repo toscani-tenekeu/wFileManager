@@ -9,6 +9,14 @@ async function runtime() {
   return import("@/lib/server/local-runtime");
 }
 
+async function analysisRuntime() {
+  return import("@/lib/server/storage-analysis");
+}
+
+async function archiveRuntime() {
+  return import("@/lib/server/archive-runtime");
+}
+
 async function handleError(error: unknown) {
   const { LocalApiError } = await runtime();
   if (error instanceof LocalApiError) return json({ error: error.message }, error.status);
@@ -35,6 +43,17 @@ export const Route = createFileRoute("/api/local")({
           if (action === "storage") {
             await api.requireUser(request);
             return json(await api.storageSummary());
+          }
+          if (action === "storage-analysis") {
+            const user = await api.requireUser(request);
+            const analysis = await analysisRuntime();
+            const force = user.isAdmin && url.searchParams.get("refresh") === "1";
+            return json(await analysis.storageAnalysis(force));
+          }
+          if (action === "archive-inspect") {
+            await api.requirePermission(request, "browse");
+            const archive = await archiveRuntime();
+            return json(await archive.inspectArchive(target));
           }
           if (action === "update-info") {
             await api.requireUser(request);
@@ -112,6 +131,16 @@ export const Route = createFileRoute("/api/local")({
           }
 
           const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+          if (action === "archive-create") {
+            await api.requirePermission(request, "create_files");
+            const archive = await archiveRuntime();
+            return json(await archive.createArchive(body.path, body.format), 201);
+          }
+          if (action === "archive-extract") {
+            await api.requirePermission(request, "create_files");
+            const archive = await archiveRuntime();
+            return json(await archive.extractArchive(body.path, body.mode, body.folderName), 201);
+          }
           if (action === "update-install") {
             await api.requireAdmin(request);
             return json(await api.installAvailableUpdate(), 202);

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   CircleCheck,
-  FileText,
+  Files,
   FolderTree,
   HardDrive,
   MemoryStick,
@@ -12,6 +12,7 @@ import {
   Users,
 } from "lucide-react";
 import { localApi } from "@/lib/local-api";
+import { storageAnalysisApi, type StorageAnalysis } from "@/lib/storage-analysis-api";
 import { formatBytes } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,12 +28,15 @@ type SystemInfo = Awaited<ReturnType<typeof localApi.system>>;
 
 function Stat({ label, value, sub, icon: Icon }: { label: string; value: string; sub: string; icon: React.ComponentType<{ className?: string }> }) {
   return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
+    <Card className="min-h-0">
+      <CardHeader className="flex-row items-center justify-between space-y-0 px-3 pb-1 pt-3">
+        <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</CardTitle>
+        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
       </CardHeader>
-      <CardContent><div className="text-2xl font-semibold tabular-nums">{value}</div><p className="mt-1 text-xs text-muted-foreground">{sub}</p></CardContent>
+      <CardContent className="px-3 pb-3 pt-0">
+        <div className="text-xl font-semibold tabular-nums">{value}</div>
+        <p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-muted-foreground">{sub}</p>
+      </CardContent>
     </Card>
   );
 }
@@ -40,26 +44,27 @@ function Stat({ label, value, sub, icon: Icon }: { label: string; value: string;
 function Overview() {
   const [system, setSystem] = useState<SystemInfo | null>(null);
   const [trash, setTrash] = useState({ items: 0, size: 0 });
-  const [rootItems, setRootItems] = useState({ total: 0, directories: 0, files: 0 });
+  const [analysis, setAnalysis] = useState<StorageAnalysis | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = async (refreshAnalysis = false) => {
     setLoading(true);
     setError(null);
+    setAnalysisError(null);
     try {
-      const [systemResult, trashResult, rootResult] = await Promise.all([
+      const [systemResult, trashResult, analysisResult] = await Promise.all([
         localApi.system(),
         localApi.trash.list().catch(() => ({ items: [], totalSize: 0 })),
-        localApi.list("/").catch(() => ({ path: "/", realPath: "/", entries: [] })),
+        storageAnalysisApi.get(refreshAnalysis).catch((cause) => {
+          setAnalysisError(cause instanceof Error ? cause.message : "Filesystem analysis is unavailable");
+          return null;
+        }),
       ]);
       setSystem(systemResult);
       setTrash({ items: trashResult.items.length, size: trashResult.totalSize });
-      setRootItems({
-        total: rootResult.entries.length,
-        directories: rootResult.entries.filter((entry) => entry.kind === "directory").length,
-        files: rootResult.entries.filter((entry) => entry.kind !== "directory").length,
-      });
+      setAnalysis(analysisResult);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to connect to the local wFileManager engine");
     } finally {
@@ -72,10 +77,11 @@ function Overview() {
   const diskPercent = system?.disk?.percent || 0;
   const memoryUsed = system ? system.memory.total - system.memory.free : 0;
   const memoryPercent = system?.memory.total ? Math.round((memoryUsed / system.memory.total) * 100) : 0;
+  const filesystemItems = analysis ? analysis.totalFiles + analysis.totalDirectories : 0;
 
   return (
     <div className="mx-auto w-full max-w-[1400px] p-4 sm:p-6 lg:p-8">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
           <p className="mt-1 text-sm text-muted-foreground">Storage and filesystem access for this wFileManager installation.</p>
@@ -85,16 +91,16 @@ function Overview() {
             <span className={error ? "mr-1.5 h-1.5 w-1.5 rounded-full bg-destructive" : "mr-1.5 h-1.5 w-1.5 rounded-full bg-primary"} />
             {loading ? "Connecting" : error ? "Local engine unavailable" : "Local engine connected"}
           </Badge>
-          <Button size="icon" variant="outline" onClick={() => void load()}><RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} /></Button>
+          <Button size="icon" variant="outline" onClick={() => void load(true)}><RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} /></Button>
         </div>
       </div>
 
       {error && <Card className="mb-4 border-destructive/40"><CardContent className="pt-6 text-sm text-destructive">{error}</CardContent></Card>}
 
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4">
         <Stat label="Root storage" value={system?.disk ? `${diskPercent}%` : "—"} sub={system?.disk ? `${formatBytes(system.disk.used)} of ${formatBytes(system.disk.total)}` : "Disk information unavailable"} icon={HardDrive} />
         <Stat label="Memory used" value={system ? `${memoryPercent}%` : "—"} sub={system ? `${formatBytes(memoryUsed)} of ${formatBytes(system.memory.total)}` : "Memory information unavailable"} icon={MemoryStick} />
-        <Stat label="Root items" value={loading ? "—" : String(rootItems.total)} sub={`${rootItems.directories} folders · ${rootItems.files} files or links`} icon={FileText} />
+        <Stat label="Filesystem items" value={analysis ? filesystemItems.toLocaleString() : "—"} sub={analysis ? `${analysis.totalFiles.toLocaleString()} files · ${analysis.totalDirectories.toLocaleString()} folders across /` : analysisError ? "Filesystem scan unavailable" : "Scanning the root filesystem"} icon={Files} />
         <Stat label="Trash" value={loading ? "—" : String(trash.items)} sub={trash.items ? `${formatBytes(trash.size)} waiting for restore or deletion` : "Trash is empty"} icon={Trash2} />
       </div>
 
@@ -131,7 +137,6 @@ function Overview() {
           </CardContent>
         </Card>
       </div>
-
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import {
   CheckCircle2,
   ChevronUp,
@@ -133,12 +133,9 @@ function Uploads() {
 
   return (
     <div className="mx-auto w-full max-w-4xl p-6">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Upload files</h1>
-          <p className="text-sm text-muted-foreground">Choose a server folder visually, then upload files with progress and cancellation.</p>
-        </div>
-        <Button asChild variant="outline"><Link to="/explorer" search={{ path: destination }}><FolderOpen className="mr-2 h-4 w-4" />Open destination</Link></Button>
+      <div className="mb-6">
+        <h1 className="text-xl font-semibold tracking-tight">Upload files</h1>
+        <p className="text-sm text-muted-foreground">Choose a server folder visually, then upload files with progress and cancellation.</p>
       </div>
 
       <Card>
