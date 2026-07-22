@@ -930,7 +930,7 @@ async function readUpdateState(currentVersion?: string): Promise<UpdateState> {
 }
 
 async function installedVersion() {
-  let currentVersion = process.env.WFILEMANAGER_VERSION || "0.6.9";
+  let currentVersion = process.env.WFILEMANAGER_VERSION || "0.6.10";
   try {
     const packageJson = JSON.parse(await readFile(path.join(process.cwd(), "package.json"), "utf8"));
     if (typeof packageJson.version === "string") currentVersion = packageJson.version;

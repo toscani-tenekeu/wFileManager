@@ -14,7 +14,7 @@ async function analysisRuntime() {
 }
 
 async function archiveRuntime() {
-  return import("@/lib/server/archive-runtime");
+  return import("@/lib/server/archive-runtime-v2");
 }
 
 async function handleError(error: unknown) {
@@ -139,7 +139,7 @@ export const Route = createFileRoute("/api/local")({
           if (action === "archive-extract") {
             await api.requirePermission(request, "create_files");
             const archive = await archiveRuntime();
-            return json(await archive.extractArchive(body.path, body.mode, body.folderName), 201);
+            return json(await archive.extractArchive(body.path, body.mode, body.folderName, body.destination, body.conflictPolicy), 201);
           }
           if (action === "update-install") {
             await api.requireAdmin(request);

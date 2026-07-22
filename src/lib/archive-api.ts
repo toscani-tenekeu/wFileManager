@@ -1,16 +1,24 @@
 import { wfilemanagerApi } from "./wfilemanager-api";
 
 export type ArchiveFormat = "zip" | "tar.gz";
-export type ExtractionMode = "current" | "folder";
+export type ExtractionMode = "current" | "folder" | "custom";
+export type ConflictPolicy = "error" | "rename" | "overwrite";
+
+export interface ArchiveTopLevelItem {
+  name: string;
+  kind: "file" | "directory";
+}
 
 export interface ArchiveInspection {
   path: string;
   format: ArchiveFormat;
   entries: number;
   topLevelEntries: string[];
+  topLevelItems: ArchiveTopLevelItem[];
   multipleTopLevel: boolean;
   suggestedFolder: string;
   destinationParent: string;
+  defaultConflicts: string[];
 }
 
 export interface ArchiveCreationResult {
@@ -25,7 +33,10 @@ export interface ArchiveExtractionResult {
   extractedTo: string;
   entries: number;
   topLevelEntries: string[];
+  renamedTopLevel: Record<string, string>;
+  conflicts: string[];
   mode: ExtractionMode;
+  conflictPolicy: ConflictPolicy;
 }
 
 async function parse<T>(response: Response): Promise<T> {
@@ -52,9 +63,14 @@ export const archiveApi = {
     headers: headers(true),
     body: JSON.stringify({ path, format }),
   }).then(parse<ArchiveCreationResult>),
-  extract: (path: string, mode: ExtractionMode, folderName?: string) => fetch("/api/local?action=archive-extract", {
+  extract: (path: string, options: {
+    mode: ExtractionMode;
+    folderName?: string;
+    destination?: string;
+    conflictPolicy?: ConflictPolicy;
+  }) => fetch("/api/local?action=archive-extract", {
     method: "POST",
     headers: headers(true),
-    body: JSON.stringify({ path, mode, folderName }),
+    body: JSON.stringify({ path, ...options }),
   }).then(parse<ArchiveExtractionResult>),
 };

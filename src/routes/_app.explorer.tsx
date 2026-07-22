@@ -40,7 +40,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { localApi, type LocalFileEntry, type OperationJob, type ProgressState } from "@/lib/local-api";
-import { archiveApi, type ArchiveFormat, type ArchiveInspection } from "@/lib/archive-api";
+import { archiveApi, type ArchiveFormat, type ArchiveInspection, type ConflictPolicy, type ExtractionMode } from "@/lib/archive-api";
 import { formatBytes, formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -187,6 +187,9 @@ function Explorer() {
   const [saving, setSaving] = useState(false);
   const [extractPlan, setExtractPlan] = useState<ExtractPlan | null>(null);
   const [archiveBusy, setArchiveBusy] = useState(false);
+  const [extractDestination, setExtractDestination] = useState("");
+  const [extractFolderName, setExtractFolderName] = useState("");
+  const [extractConflictPolicy, setExtractConflictPolicy] = useState<ConflictPolicy>("rename");
   const [operationProgress, setOperationProgress] = useState<{
     label: string;
     percent: number;
@@ -414,15 +417,18 @@ function Explorer() {
   const extractArchive = async (entry: LocalFileEntry) => {
     if (archiveBusy) return;
     setArchiveBusy(true);
-    setOperationProgress({ label: `Inspecting ${entry.name}`, percent: 15, detail: "Checking archive safety" });
+    setOperationProgress({ label: `Inspecting ${entry.name}`, percent: 15, detail: "Checking archive safety and destination" });
     try {
       const inspection = await archiveApi.inspect(entry.path);
       setOperationProgress(null);
-      if (inspection.multipleTopLevel) {
+      if (inspection.multipleTopLevel || inspection.defaultConflicts.length > 0) {
+        setExtractDestination(inspection.destinationParent);
+        setExtractFolderName(inspection.suggestedFolder);
+        setExtractConflictPolicy("rename");
         setExtractPlan({ entry, inspection });
       } else {
         setOperationProgress({ label: `Extracting ${entry.name}`, percent: 35, detail: `Into ${inspection.destinationParent}` });
-        const result = await archiveApi.extract(entry.path, "current");
+        const result = await archiveApi.extract(entry.path, { mode: "current", conflictPolicy: "error" });
         setOperationProgress({ label: `Extracting ${entry.name}`, percent: 100, detail: result.extractedTo });
         toast.success(`${entry.name} extracted into ${result.extractedTo}`);
         await load();
@@ -436,24 +442,27 @@ function Explorer() {
     }
   };
 
-  const confirmExtraction = async (mode: "current" | "folder") => {
+  const confirmExtraction = async (mode: ExtractionMode) => {
     if (!extractPlan || archiveBusy) return;
     const plan = extractPlan;
     setExtractPlan(null);
     setArchiveBusy(true);
-    setOperationProgress({
-      label: `Extracting ${plan.entry.name}`,
-      percent: 35,
-      detail: mode === "folder" ? `Into ${plan.inspection.suggestedFolder}` : `Into ${plan.inspection.destinationParent}`,
-    });
+    const detail = mode === "folder"
+      ? `Into ${extractFolderName || plan.inspection.suggestedFolder}`
+      : mode === "custom"
+        ? `Into ${extractDestination}`
+        : `Into ${plan.inspection.destinationParent}`;
+    setOperationProgress({ label: `Extracting ${plan.entry.name}`, percent: 35, detail });
     try {
-      const result = await archiveApi.extract(
-        plan.entry.path,
+      const result = await archiveApi.extract(plan.entry.path, {
         mode,
-        mode === "folder" ? plan.inspection.suggestedFolder : undefined,
-      );
+        folderName: mode === "folder" ? extractFolderName || plan.inspection.suggestedFolder : undefined,
+        destination: mode === "custom" ? extractDestination : undefined,
+        conflictPolicy: extractConflictPolicy,
+      });
       setOperationProgress({ label: `Extracting ${plan.entry.name}`, percent: 100, detail: result.extractedTo });
-      toast.success(`${plan.entry.name} extracted into ${result.extractedTo}`);
+      const renamed = Object.entries(result.renamedTopLevel).filter(([from, to]) => from !== to);
+      toast.success(`${plan.entry.name} extracted into ${result.extractedTo}${renamed.length ? ` · ${renamed.length} conflict(s) renamed` : ""}`);
       await load();
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Archive extraction failed");
@@ -495,8 +504,8 @@ function Explorer() {
       <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
         <DropdownMenuItem onClick={() => void openEntry(entry)}><Eye className="mr-2 h-4 w-4" />{entry.kind === "directory" ? "Open" : "View / edit"}</DropdownMenuItem>
         {entry.kind === "file" && <DropdownMenuItem onClick={() => void downloadEntry(entry)}><Download className="mr-2 h-4 w-4" />Download</DropdownMenuItem>}
-        {entry.kind === "directory" && <DropdownMenuItem onClick={() => void createArchive(entry, "zip")}><FileArchive className="mr-2 h-4 w-4" />Compress as ZIP</DropdownMenuItem>}
-        {entry.kind === "directory" && <DropdownMenuItem onClick={() => void createArchive(entry, "tar.gz")}><FileArchive className="mr-2 h-4 w-4" />Compress as TAR.GZ</DropdownMenuItem>}
+        {(entry.kind === "directory" || entry.kind === "file") && <DropdownMenuItem onClick={() => void createArchive(entry, "zip")}><FileArchive className="mr-2 h-4 w-4" />Compress as ZIP</DropdownMenuItem>}
+        {(entry.kind === "directory" || entry.kind === "file") && <DropdownMenuItem onClick={() => void createArchive(entry, "tar.gz")}><FileArchive className="mr-2 h-4 w-4" />Compress as TAR.GZ</DropdownMenuItem>}
         {isArchiveEntry(entry) && <DropdownMenuItem onClick={() => void extractArchive(entry)}><FolderInput className="mr-2 h-4 w-4" />Extract archive</DropdownMenuItem>}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => openRename(entry)}><Pencil className="mr-2 h-4 w-4" />Rename</DropdownMenuItem>
@@ -514,8 +523,8 @@ function Explorer() {
     <ContextMenuContent className="min-w-56">
       <ContextMenuItem onClick={() => void openEntry(entry)}><Eye className="mr-2 h-4 w-4" />{entry.kind === "directory" ? "Open" : "View / edit"}</ContextMenuItem>
       {entry.kind === "file" && <ContextMenuItem onClick={() => void downloadEntry(entry)}><Download className="mr-2 h-4 w-4" />Download</ContextMenuItem>}
-      {entry.kind === "directory" && <ContextMenuItem onClick={() => void createArchive(entry, "zip")}><FileArchive className="mr-2 h-4 w-4" />Compress as ZIP</ContextMenuItem>}
-      {entry.kind === "directory" && <ContextMenuItem onClick={() => void createArchive(entry, "tar.gz")}><FileArchive className="mr-2 h-4 w-4" />Compress as TAR.GZ</ContextMenuItem>}
+      {(entry.kind === "directory" || entry.kind === "file") && <ContextMenuItem onClick={() => void createArchive(entry, "zip")}><FileArchive className="mr-2 h-4 w-4" />Compress as ZIP</ContextMenuItem>}
+      {(entry.kind === "directory" || entry.kind === "file") && <ContextMenuItem onClick={() => void createArchive(entry, "tar.gz")}><FileArchive className="mr-2 h-4 w-4" />Compress as TAR.GZ</ContextMenuItem>}
       {isArchiveEntry(entry) && <ContextMenuItem onClick={() => void extractArchive(entry)}><FolderInput className="mr-2 h-4 w-4" />Extract archive</ContextMenuItem>}
       <ContextMenuSeparator />
       <ContextMenuItem onClick={() => openRename(entry)}><Pencil className="mr-2 h-4 w-4" />Rename</ContextMenuItem>
@@ -525,7 +534,7 @@ function Explorer() {
       <ContextMenuItem onClick={() => setPropertiesEntry(entry)}><Info className="mr-2 h-4 w-4" />Properties</ContextMenuItem>
       <ContextMenuSeparator />
       <ContextMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeleteEntries(selectedPaths.has(entry.path) && selectedEntries.length > 1 ? selectedEntries : [entry])}>
-        <Trash2 className="mr-2 h-4 w-4" />{selectedPaths.has(entry.path) && selectedEntries.length > 1 ? `Move ${selectedEntries.length} selected items to trash` : "Move to trash"}
+        <Trash2 className="mr-2 h-4 w-4" />{selectedPaths.has(entry.path) && selectedEntries.length > 1 ? `Delete all selected (${selectedEntries.length})` : "Move to trash"}
       </ContextMenuItem>
     </ContextMenuContent>
   );
@@ -626,14 +635,6 @@ function Explorer() {
           </div>
         </div>
 
-        {selectedEntries.length > 0 && (
-          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-primary/25 bg-primary/5 px-2.5 py-2 text-xs">
-            <span className="font-medium">{selectedEntries.length} selected</span>
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setSelectedPaths(new Set(visibleEntries.map((entry) => entry.path)))}>Select all visible</Button>
-            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={clearSelection}>Clear</Button>
-            <Button size="sm" variant="destructive" className="ml-auto h-7 text-xs" onClick={() => setDeleteEntries(selectedEntries)}><Trash2 className="mr-1.5 h-3.5 w-3.5" />Move selected to trash</Button>
-          </div>
-        )}
       </div>
 
       {operationProgress && (
@@ -958,28 +959,63 @@ function Explorer() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={Boolean(extractPlan)} onOpenChange={(open) => !open && setExtractPlan(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Archive contains multiple top-level items</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-3 text-sm text-muted-foreground">
-                <p>Extracting <span className="font-mono text-foreground">{extractPlan?.entry.name}</span> directly into <span className="font-mono text-foreground">{extractPlan?.inspection.destinationParent}</span> will place several items there.</p>
-                <div className="max-h-32 overflow-y-auto rounded-md border border-border bg-muted/30 p-2 font-mono text-xs">
-                  {extractPlan?.inspection.topLevelEntries.slice(0, 20).map((item) => <div key={item}>{item}</div>)}
-                  {(extractPlan?.inspection.topLevelEntries.length || 0) > 20 && <div>…and {(extractPlan?.inspection.topLevelEntries.length || 0) - 20} more</div>}
-                </div>
-                <p>Continue with raw extraction or place everything in a new folder named <span className="font-mono text-foreground">{extractPlan?.inspection.suggestedFolder}</span>.</p>
+      <Dialog open={Boolean(extractPlan)} onOpenChange={(open) => !open && setExtractPlan(null)}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Archive extraction options</DialogTitle>
+            <DialogDescription>
+              Choose how and where <span className="font-mono">{extractPlan?.entry.name}</span> should be extracted.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {extractPlan?.inspection.multipleTopLevel && (
+              <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
+                <p className="font-medium">This archive has several items at its first level.</p>
+                <p className="mt-1 text-muted-foreground">Extracting here will place all of them directly in the destination directory.</p>
               </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            )}
+
+            {(extractPlan?.inspection.defaultConflicts.length || 0) > 0 && (
+              <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
+                <p className="font-medium">Existing destination items detected</p>
+                <p className="mt-1 font-mono text-xs text-muted-foreground">{extractPlan?.inspection.defaultConflicts.join(", ")}</p>
+              </div>
+            )}
+
+            <div className="max-h-28 overflow-y-auto rounded-md border border-border bg-muted/25 p-2 font-mono text-xs">
+              {extractPlan?.inspection.topLevelItems.slice(0, 20).map((item) => <div key={item.name}>{item.kind === "directory" ? "folder" : "file"} · {item.name}</div>)}
+              {(extractPlan?.inspection.topLevelItems.length || 0) > 20 && <div>…and {(extractPlan?.inspection.topLevelItems.length || 0) - 20} more</div>}
+            </div>
+
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">When an item already exists</p>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant={extractConflictPolicy === "rename" ? "secondary" : "outline"} onClick={() => setExtractConflictPolicy("rename")}>Keep both · use (1), (2)…</Button>
+                <Button type="button" size="sm" variant={extractConflictPolicy === "overwrite" ? "destructive" : "outline"} onClick={() => setExtractConflictPolicy("overwrite")}>Replace existing</Button>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-xs text-muted-foreground">New folder name</label>
+                <Input value={extractFolderName} onChange={(event) => setExtractFolderName(event.target.value)} className="font-mono" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs text-muted-foreground">Custom destination</label>
+                <Input value={extractDestination} onChange={(event) => setExtractDestination(event.target.value)} className="font-mono" />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="flex-wrap gap-2 sm:justify-end">
+            <Button variant="ghost" onClick={() => setExtractPlan(null)}>Cancel</Button>
             <Button variant="outline" onClick={() => void confirmExtraction("current")}>Extract here</Button>
-            <AlertDialogAction onClick={() => void confirmExtraction("folder")}>Extract into folder</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            <Button variant="outline" onClick={() => void confirmExtraction("folder")}>Extract into new folder</Button>
+            <Button onClick={() => void confirmExtraction("custom")}>Extract to destination</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

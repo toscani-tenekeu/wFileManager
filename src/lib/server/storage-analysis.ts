@@ -102,7 +102,7 @@ async function scanRootFilesystem() {
     ")",
     "-prune",
     "-o",
-    "-printf", "%y\t%s\t%p\0",
+    "-printf", "%y\\t%s\\t%p\\0",
   ];
 
   await new Promise<void>((resolve, reject) => {
