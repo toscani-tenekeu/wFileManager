@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { FolderTree } from "lucide-react";
 
 export function AuthShell({
   title,
@@ -17,9 +16,7 @@ export function AuthShell({
     <div className="grid min-h-screen bg-background lg:grid-cols-2">
       <div className="hidden flex-col justify-between border-r border-border bg-surface p-10 lg:flex">
         <Link to="/" className="flex items-center gap-2">
-          <div className="grid h-8 w-8 place-items-center rounded-md bg-primary/15 text-primary">
-            <FolderTree className="h-4 w-4" />
-          </div>
+          <img src="/favicon.svg" alt="" className="h-9 w-9 object-contain" />
           <div className="text-sm font-semibold">wFileManager</div>
         </Link>
         <div className="max-w-md">
@@ -37,9 +34,7 @@ export function AuthShell({
         <div className="w-full max-w-sm">
           <div className="mb-6 lg:hidden">
             <Link to="/" className="inline-flex items-center gap-2">
-              <div className="grid h-7 w-7 place-items-center rounded-md bg-primary/15 text-primary">
-                <FolderTree className="h-4 w-4" />
-              </div>
+              <img src="/favicon.svg" alt="" className="h-8 w-8 object-contain" />
               <span className="text-sm font-semibold">wFileManager</span>
             </Link>
           </div>
