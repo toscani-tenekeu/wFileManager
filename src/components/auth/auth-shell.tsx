@@ -20,7 +20,7 @@ export function AuthShell({
         </Link>
         <div className="max-w-md">
           <h2 className="text-2xl font-semibold leading-tight">
-            A modern file manager for Linux servers.
+            A modern and open source file manager for Linux servers.
           </h2>
           <p className="mt-3 text-sm text-muted-foreground">
             Browse, edit, upload, share and audit files from a single administration panel. Built
