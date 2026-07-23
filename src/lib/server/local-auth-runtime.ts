@@ -15,6 +15,12 @@ function tokenFromRequest(request: Request) {
   return value.startsWith("Bearer ") ? value.slice(7).trim() : "";
 }
 
+function assignablePermissions(permissions: unknown) {
+  return Array.isArray(permissions)
+    ? permissions.filter((permission): permission is string => typeof permission === "string" && permission !== "use_terminal")
+    : [];
+}
+
 function sqliteUser(request: Request): LocalUser {
   const token = tokenFromRequest(request);
   if (!token) throw new LocalApiError(401, "Missing session token");
@@ -28,7 +34,7 @@ function sqliteUser(request: Request): LocalUser {
       status: user.status,
       roleId: user.roleId,
       roleName: user.roleName,
-      permissions: user.permissions,
+      permissions: assignablePermissions(user.permissions),
     };
   } catch (error) {
     const value = error as { status?: number; message?: string };
@@ -37,7 +43,8 @@ function sqliteUser(request: Request): LocalUser {
 }
 
 export async function requireUser(request: Request): Promise<LocalUser> {
-  return DATABASE_MODE === "sqlite" ? sqliteUser(request) : remoteRuntime.requireUser(request);
+  const user = DATABASE_MODE === "sqlite" ? sqliteUser(request) : await remoteRuntime.requireUser(request);
+  return { ...user, permissions: assignablePermissions(user.permissions) };
 }
 
 export function assertAdmin(user: LocalUser) {
@@ -46,6 +53,7 @@ export function assertAdmin(user: LocalUser) {
 
 export function assertPermission(user: LocalUser, permission: string) {
   if (user.isAdmin) return;
+  if (permission === "use_terminal") throw new LocalApiError(403, "Terminal access is reserved for administrators");
   if (!Array.isArray(user.permissions) || !user.permissions.includes(permission)) {
     throw new LocalApiError(403, `Your role does not include the ${permission.replace(/_/g, " ")} permission`);
   }
@@ -53,7 +61,8 @@ export function assertPermission(user: LocalUser, permission: string) {
 
 export function assertAnyPermission(user: LocalUser, permissions: string[]) {
   if (user.isAdmin) return;
-  if (!Array.isArray(user.permissions) || !permissions.some((permission) => user.permissions?.includes(permission))) {
+  const assignable = permissions.filter((permission) => permission !== "use_terminal");
+  if (!Array.isArray(user.permissions) || !assignable.some((permission) => user.permissions?.includes(permission))) {
     throw new LocalApiError(403, "Your role does not allow this operation");
   }
 }
