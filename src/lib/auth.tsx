@@ -23,7 +23,7 @@ async function enrichUser(user: AuthUser) {
       "browse", "view", "preview", "read", "create_files", "create_directories", "edit", "rename",
       "copy", "move", "upload", "download", "compress", "extract", "delete", "restore",
       "permanently_delete", "change_permissions", "change_owner", "change_group", "create_symlinks",
-      "calculate_checksums", "use_terminal", "manage_users", "manage_roles",
+      "calculate_checksums", "manage_users", "manage_roles",
     ] : user.permissions || [] };
   }
 }
