@@ -1,4 +1,4 @@
-import { wfilemanagerApi, type AuthUser } from "./wfilemanager-api";
+import { wfilemanagerApi } from "./wfilemanager-api";
 
 export interface LocalFileEntry {
   name: string;
@@ -76,21 +76,24 @@ export interface TerminalIdentity {
   sudo: boolean;
 }
 
-export interface StorageMount {
-  device: string;
-  mountpoint: string;
-  fstype: string;
-  options: string;
-  total: number;
-  used: number;
-  available: number;
-  percent: number;
-  inodesTotal: number;
-  inodesUsed: number;
-  inodesAvailable: number;
-  inodePercent: number;
-  readonly: boolean;
-  health: "healthy" | "warning" | "critical" | "read-only";
+export interface FileManagerOverview {
+  hostname: string;
+  platform: string;
+  release: string;
+  architecture: string;
+  uptime: number;
+  node: string;
+  loginUsers: number;
+  root: { path: string; entries: number | null; readable: boolean; writable: boolean };
+  locations: Array<{ path: string; exists: boolean; readable: boolean; writable: boolean; entries: number | null }>;
+  availableLocations: number;
+  writableLocations: number;
+  totalCommonLocations: number;
+  editorLimitBytes: number;
+  uploadLimitBytes: number;
+  protectedPseudoFilesystems: string[];
+  os: { id: string; name: string; versionId: string; versionCodename: string; prettyName: string };
+  generatedAt: string;
 }
 
 export type UpdatePhase =
@@ -129,7 +132,7 @@ export interface UpdateInfo {
 
 async function parse<T>(response: Response): Promise<T> {
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || `Local API request failed (${response.status})`);
+  if (!response.ok) throw new Error((payload as { error?: string }).error || `Local API request failed (${response.status})`);
   return payload as T;
 }
 
@@ -162,12 +165,7 @@ function notifySilently(data: { title: string; message?: string; tone?: "info" |
   void wfilemanagerApi.createNotification(data).catch(() => undefined);
 }
 
-function uploadSingleFile(
-  path: string,
-  file: File,
-  onProgress?: (loaded: number) => void,
-  signal?: AbortSignal,
-) {
+function uploadSingleFile(path: string, file: File, onProgress?: (loaded: number) => void, signal?: AbortSignal) {
   return new Promise<LocalFileEntry>((resolve, reject) => {
     if (signal?.aborted) {
       reject(abortError(`Upload cancelled for ${file.name}`));
@@ -192,10 +190,10 @@ function uploadSingleFile(
     };
     xhr.onload = () => {
       cleanup();
-      let payload: any = {};
-      try { payload = JSON.parse(xhr.responseText || "{}"); } catch { /* ignore invalid error payload */ }
+      let payload: unknown = {};
+      try { payload = JSON.parse(xhr.responseText || "{}"); } catch { /* Ignore malformed error payloads. */ }
       if (xhr.status < 200 || xhr.status >= 300) {
-        reject(new Error(payload.error || `Upload failed for ${file.name} (${xhr.status})`));
+        reject(new Error((payload as { error?: string }).error || `Upload failed for ${file.name} (${xhr.status})`));
         return;
       }
       onProgress?.(file.size);
@@ -206,12 +204,7 @@ function uploadSingleFile(
   });
 }
 
-async function uploadWithProgress(
-  path: string,
-  files: FileList | File[],
-  onProgress?: (progress: ProgressState) => void,
-  signal?: AbortSignal,
-) {
+async function uploadWithProgress(path: string, files: FileList | File[], onProgress?: (progress: ProgressState) => void, signal?: AbortSignal) {
   const values = Array.from(files);
   const total = values.reduce((sum, file) => sum + file.size, 0);
   let completed = 0;
@@ -222,37 +215,20 @@ async function uploadWithProgress(
     if (signal?.aborted) throw abortError("Upload cancelled");
     const entry = await uploadSingleFile(path, file, (currentFileLoaded) => {
       const loaded = Math.min(total, completed + currentFileLoaded);
-      onProgress?.({
-        loaded,
-        total,
-        percent: total ? Math.min(100, Math.round((loaded / total) * 100)) : 100,
-        detail: file.name,
-      });
+      onProgress?.({ loaded, total, percent: total ? Math.min(100, Math.round((loaded / total) * 100)) : 100, detail: file.name });
     }, signal);
     completed += file.size;
     uploaded.push(entry);
   }
 
   onProgress?.({ loaded: total, total, percent: 100 });
-  notifySilently({
-    title: "Upload completed",
-    message: `${values.length} file(s) uploaded to ${path}.`,
-    tone: "success",
-    link: `/explorer?path=${encodeURIComponent(path)}`,
-    source: "upload",
-  });
+  notifySilently({ title: "Upload completed", message: `${values.length} file(s) uploaded to ${path}.`, tone: "success", link: `/explorer?path=${encodeURIComponent(path)}`, source: "upload" });
   return { uploaded };
 }
 
-async function runJob(
-  operation: "copy" | "move" | "delete",
-  source: string,
-  destination: string | undefined,
-  onProgress?: (job: OperationJob) => void,
-) {
+async function runJob(operation: "copy" | "move" | "delete", source: string, destination: string | undefined, onProgress?: (job: OperationJob) => void) {
   const started = await post<{ job: OperationJob }>("job-start", { operation, source, destination });
   onProgress?.(started.job);
-
   while (true) {
     await new Promise((resolve) => setTimeout(resolve, 350));
     const current = await get<{ job: OperationJob }>("job", { id: started.job.id });
@@ -271,12 +247,7 @@ async function runJob(
   }
 }
 
-async function downloadWithProgress(
-  path: string,
-  filename: string,
-  onProgress?: (progress: ProgressState) => void,
-  signal?: AbortSignal,
-) {
+async function downloadWithProgress(path: string, filename: string, onProgress?: (progress: ProgressState) => void, signal?: AbortSignal) {
   const token = wfilemanagerApi.getToken();
   const response = await fetch(`/api/local?action=download&path=${encodeURIComponent(path)}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -284,7 +255,7 @@ async function downloadWithProgress(
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.error || "Download failed");
+    throw new Error((payload as { error?: string }).error || "Download failed");
   }
 
   const total = Number(response.headers.get("content-length") || 0);
@@ -304,12 +275,7 @@ async function downloadWithProgress(
       if (value) {
         chunks.push(value);
         loaded += value.byteLength;
-        onProgress?.({
-          loaded,
-          total,
-          percent: total ? Math.min(100, Math.round((loaded / total) * 100)) : 0,
-          detail: filename,
-        });
+        onProgress?.({ loaded, total, percent: total ? Math.min(100, Math.round((loaded / total) * 100)) : 0, detail: filename });
       }
     }
   } else {
@@ -375,29 +341,13 @@ export const localApi = {
       return result;
     },
   },
-  system: () => get<{
-    loginUsers: number;
-    hostname: string;
-    platform: string;
-    release: string;
-    architecture: string;
-    uptime: number;
-    memory: { total: number; free: number };
-    disk: { total: number; used: number; available: number; percent: number } | null;
-    node: string;
-    os: { id: string; name: string; versionId: string; versionCodename: string; prettyName: string };
-  }>("system"),
-  storage: () => get<{ mounts: StorageMount[]; primary: StorageMount | null; volumeCount: number; generatedAt: string }>("storage"),
+  overview: () => get<FileManagerOverview>("overview"),
   updateInfo: () => get<UpdateInfo>("update-info"),
   installUpdate: () => post<{ success: true; state: UpdateState }>("update-install", {}),
   rollbackUpdate: () => post<{ success: true; state: UpdateState }>("update-rollback", {}),
   upload: uploadWithProgress,
   download: downloadWithProgress,
   terminalIdentity: () => get<TerminalIdentity>("terminal-user"),
-  provisionSelf: (password: string) => post<TerminalIdentity>("provision-self", { password }),
-  provisionUser: (user: AuthUser, password: string) => post<TerminalIdentity>("provision-user", { user, password }),
-  deprovisionUser: (user: AuthUser) => post<{ success: true; linuxUsername: string; removed: boolean }>("deprovision-user", { user }),
-  syncLinuxPassword: (password: string) => post<TerminalIdentity>("sync-linux-password", { password }),
   ptyCreate: (cwd: string | undefined, cols = 120, rows = 32, mode: "user" | "root" = "user", password?: string) =>
     post<{ sessionId: string; mode: "user" | "root"; linuxUsername: string; home: string }>("pty-create", { cwd, cols, rows, mode, password }),
   ptyInput: (sessionId: string, data: string) => post<{ success: true }>("pty-input", { sessionId, data }),
