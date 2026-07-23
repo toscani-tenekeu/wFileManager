@@ -25,7 +25,7 @@ export const Route = createFileRoute("/_app/")({
 type SystemInfo = Awaited<ReturnType<typeof localApi.system>>;
 type OverviewDisk = NonNullable<SystemInfo["disk"]> & {
   capacityReliable?: boolean;
-  measurement?: "configured" | "filesystem" | "server-usage";
+  measurement?: "configured" | "quota" | "filesystem" | "server-usage";
 };
 
 function Stat({ label, value, sub, icon: Icon }: { label: string; value: string; sub: string; icon: React.ComponentType<{ className?: string }> }) {
@@ -69,20 +69,16 @@ function Overview() {
   useEffect(() => { void load(); }, []);
 
   const disk = system?.disk as OverviewDisk | null | undefined;
-  const hasReliableDiskCapacity = Boolean(disk && disk.capacityReliable !== false && disk.total > 0);
-  const diskPercent = hasReliableDiskCapacity ? disk?.percent || 0 : 0;
+  const hasDiskCapacity = Boolean(disk && disk.total > 0 && disk.capacityReliable !== false);
+  const diskPercent = hasDiskCapacity ? disk?.percent || 0 : 0;
   const memoryUsed = system ? system.memory.total - system.memory.free : 0;
   const memoryPercent = system?.memory.total ? Math.round((memoryUsed / system.memory.total) * 100) : 0;
 
-  const storageValue = disk
-    ? hasReliableDiskCapacity
-      ? `${diskPercent}%`
-      : formatBytes(disk.used)
-    : "—";
+  const storageValue = disk ? `${formatBytes(disk.used)} used` : "—";
   const storageDescription = disk
-    ? hasReliableDiskCapacity
-      ? `${formatBytes(disk.used)} of ${formatBytes(disk.total)}`
-      : "Used by this server; no external capacity shown"
+    ? hasDiskCapacity
+      ? `${formatBytes(disk.available)} free`
+      : "Free space is not reported"
     : "Storage information unavailable";
 
   return (
@@ -104,7 +100,7 @@ function Overview() {
       {error && <Card className="mb-4 border-destructive/40"><CardContent className="pt-6 text-sm text-destructive">{error}</CardContent></Card>}
 
       <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Server storage" value={storageValue} sub={storageDescription} icon={HardDrive} />
+        <Stat label="Storage state" value={storageValue} sub={storageDescription} icon={HardDrive} />
         <Stat label="Memory used" value={system ? `${memoryPercent}%` : "—"} sub={system ? `${formatBytes(memoryUsed)} of ${formatBytes(system.memory.total)}` : "Memory information unavailable"} icon={MemoryStick} />
         <Stat label="Server users" value={system ? system.loginUsers.toLocaleString() : "—"} sub={system ? "Linux accounts with login access" : "User information unavailable"} icon={Users} />
         <Stat label="Trash" value={loading ? "—" : String(trash.items)} sub={trash.items ? `${formatBytes(trash.size)} waiting for restore or deletion` : "Trash is empty"} icon={Trash2} />
@@ -121,19 +117,14 @@ function Overview() {
               <div><p className="text-xs text-muted-foreground">Service port</p><p className="mt-1 font-mono">127.0.0.1:1973</p></div>
             </div>
             <div>
-              <div className="mb-1.5 flex justify-between text-xs">
-                <span className="text-muted-foreground">{hasReliableDiskCapacity ? "Storage usage" : "Server data stored"}</span>
-                <span className="font-mono">
-                  {disk ? hasReliableDiskCapacity ? `${formatBytes(disk.available)} available` : `${formatBytes(disk.used)} measured locally` : "—"}
+              <div className="mb-1.5 flex justify-between gap-4 text-xs">
+                <span className="text-muted-foreground">Storage usage</span>
+                <span className="text-right font-mono">
+                  {disk ? `${formatBytes(disk.used)} used · ${hasDiskCapacity ? `${formatBytes(disk.available)} free` : "free —"}` : "—"}
                 </span>
               </div>
-              {hasReliableDiskCapacity ? (
-                <Progress value={diskPercent} className="h-2" />
-              ) : (
-                <p className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                  This server environment does not expose a reliable storage capacity limit. wFileManager shows measured usage and hides external filesystem totals.
-                </p>
-              )}
+              <Progress value={diskPercent} className="h-2" />
+              {disk && hasDiskCapacity && <div className="mt-1 text-right text-[10px] text-muted-foreground">{formatBytes(disk.total)} total</div>}
             </div>
             <div>
               <div className="mb-1.5 flex justify-between text-xs"><span className="text-muted-foreground">Memory usage</span><span className="font-mono">{system ? `${formatBytes(system.memory.free)} free` : "—"}</span></div>
