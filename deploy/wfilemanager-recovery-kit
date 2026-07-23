@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ENV_FILE="${WFILEMANAGER_ENV_FILE:-/etc/wfilemanager/wfilemanager.env}"
+RECOVERY_KEY_FILE="${WFILEMANAGER_RECOVERY_KEY_FILE:-/etc/wfilemanager/root-reset.key}"
+ACTION="${1:-show}"
+DESTINATION="${2:-/root/wfilemanager-recovery-kit.txt}"
+
+[[ $EUID -eq 0 ]] || { echo "Run this command with sudo or as root." >&2; exit 1; }
+[[ -f "$ENV_FILE" ]] || { echo "wFileManager configuration was not found." >&2; exit 1; }
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+set +a
+
+[[ "${WFILEMANAGER_DATABASE_MODE:-}" == "supabase" ]] || {
+  echo "A Recovery Kit is only used by the managed Supabase database mode." >&2
+  exit 1
+}
+[[ -s "$RECOVERY_KEY_FILE" ]] || { echo "The recovery key file is missing." >&2; exit 1; }
+
+RECOVERY_KEY="$(tr -d '\r\n' <"$RECOVERY_KEY_FILE")"
+INSTANCE_KEY="${WFILEMANAGER_INSTANCE_KEY:-}"
+DOMAIN="${WFILEMANAGER_DOMAIN:-}"
+
+render() {
+  cat <<TEXT
+wFileManager Recovery Kit
+
+Instance key: $INSTANCE_KEY
+Recovery key: $RECOVERY_KEY
+Domain: $DOMAIN
+Database mode: KmerHosting managed Supabase
+
+Keep this file outside the VPS. It can recover or permanently delete the managed
+Supabase data after the server is reinstalled or lost. Recovery rotates this key,
+so replace every old copy after a successful recovery.
+
+Lifecycle policy:
+- A valid server heartbeat keeps the instance active.
+- After 30 days without a heartbeat, the instance is frozen and sessions are revoked.
+- After 90 days without a heartbeat or recovery, the managed Supabase data is deleted.
+- No inactivity warning email is sent.
+
+To recover or delete the remote data, run the official installer and choose the
+corresponding managed Supabase action.
+TEXT
+}
+
+case "$ACTION" in
+  show)
+    render
+    ;;
+  export)
+    umask 077
+    render >"$DESTINATION"
+    chmod 600 "$DESTINATION"
+    echo "$DESTINATION"
+    ;;
+  *)
+    echo "Usage: $0 {show|export [destination]}" >&2
+    exit 64
+    ;;
+esac
