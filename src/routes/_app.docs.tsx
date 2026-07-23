@@ -54,9 +54,9 @@ const SECTIONS: DocSection[] = [
     icon: BookOpen,
     route: "/",
     details: [
-      "The Overview page reports root-directory items, common readable and writable locations, Linux login users and trash content.",
+      "Overview reports the number of items in the root directory, accessible common locations, Linux login users and trash content.",
       "It also displays the text-editor limit, upload request limit and protected pseudo-filesystems.",
-      "The Overview intentionally focuses on file-management capabilities rather than general server resource monitoring.",
+      "The page intentionally focuses on file-management capabilities rather than general server monitoring.",
     ],
   },
   {
@@ -68,14 +68,14 @@ const SECTIONS: DocSection[] = [
     route: "/explorer",
     details: [
       "Use the path field, breadcrumbs, Back, Forward, Parent and Home controls to move through the filesystem.",
-      "List view is the default. The entire row is selectable and can be double-clicked.",
-      "Mosaic view is available from the view selector and is remembered in the browser.",
+      "List view is the default and the entire row can be selected or double-clicked.",
+      "Mosaic view is available from the view selector and the preference is remembered in the browser.",
       "Hidden files can be displayed from the explorer toolbar.",
     ],
-    notes: [{ tone: "warning", title: "Sensitive locations", body: "Directories such as /etc, /root, /boot and /var/lib may contain files required by the operating system or installed services." }],
+    notes: [{ tone: "warning", title: "Sensitive locations", body: "Directories such as /etc, /root, /boot and /var/lib may contain files required by Linux or installed services." }],
   },
   {
-    id: "file-operations",
+    id: "operations",
     category: "Files",
     title: "File operations",
     summary: "Create, inspect, edit, rename, copy, move and delete items.",
@@ -83,11 +83,11 @@ const SECTIONS: DocSection[] = [
     route: "/explorer",
     details: [
       "Use New file and New folder to create items in the current directory.",
-      "The item menu provides View/Edit, Download, Rename, Copy, Move, Permissions, Properties and Delete.",
-      "Mutating operations reject paths that traverse symbolic links into protected kernel-managed filesystems.",
-      "Longer copy, move and delete operations expose progress and report failures without freezing the interface.",
+      "The item menu provides preview, editing, download, rename, copy, move, permissions, properties and delete actions.",
+      "Mutating operations reject paths that traverse symbolic links into protected kernel-managed locations.",
+      "Long copy, move and delete operations expose progress and return explicit failures.",
     ],
-    notes: [{ tone: "danger", title: "System impact", body: "Renaming, moving or editing a system file can prevent Linux services from starting. Confirm the absolute path before saving." }],
+    notes: [{ tone: "danger", title: "System impact", body: "Editing or moving a system file can prevent services from starting. Verify the absolute path before confirming." }],
   },
   {
     id: "permissions",
@@ -97,10 +97,10 @@ const SECTIONS: DocSection[] = [
     icon: ShieldCheck,
     route: "/explorer",
     details: [
-      "Permissions are displayed as an octal mode such as 0644 or 0755.",
-      "Role permissions determine whether wFileManager exposes an operation.",
-      "Linux permissions still determine whether the operating system accepts the operation.",
-      "Do not use 0777 as a general permission fix.",
+      "Permissions are displayed as octal values such as 0644 or 0755.",
+      "Application roles determine whether wFileManager exposes an operation.",
+      "Linux permissions still determine whether the operating system accepts it.",
+      "Avoid using 0777 as a general permission fix.",
     ],
   },
   {
@@ -112,9 +112,9 @@ const SECTIONS: DocSection[] = [
     route: "/uploads",
     details: [
       "Select a destination with the directory browser, recent locations or common-path shortcuts.",
-      "Completed uploads are committed atomically and never overwrite an existing file with the same name.",
-      "A partial temporary file is removed when a transfer fails or is cancelled.",
-      "The configured upload limit is displayed on Overview.",
+      "Uploads are streamed into a temporary file and committed only after the transfer completes.",
+      "An existing destination is never overwritten; the server returns a conflict instead.",
+      "Partial temporary files are removed after cancellation or failure.",
     ],
   },
   {
@@ -125,10 +125,24 @@ const SECTIONS: DocSection[] = [
     icon: Download,
     route: "/explorer",
     details: [
-      "Start a download from the item menu in File Explorer.",
+      "Start a download from an item menu in File Explorer.",
       "Transferred bytes and percentage are displayed when the browser exposes the file size.",
-      "Cancel aborts the request before the browser saves the completed file.",
-      "Very large downloads may consume significant temporary browser memory.",
+      "Cancel aborts the request before the completed file is saved.",
+      "Very large downloads may consume temporary browser memory.",
+    ],
+  },
+  {
+    id: "archives",
+    category: "Files",
+    title: "Archives",
+    summary: "Create and extract ZIP or TAR.GZ archives with safety limits.",
+    icon: FolderCog,
+    route: "/explorer",
+    details: [
+      "Absolute paths, parent traversal, symbolic links, hard links and device entries are rejected during extraction.",
+      "Entry count, expanded size, compression ratio and destination free space are checked before extraction.",
+      "Conflict handling can stop, rename top-level items or replace explicitly selected destinations.",
+      "Archive creation skips symbolic links and unsupported special entries.",
     ],
   },
   {
@@ -139,9 +153,9 @@ const SECTIONS: DocSection[] = [
     icon: Trash2,
     route: "/trash",
     details: [
-      "Delete in File Explorer moves the item into the private wFileManager trash.",
-      "Each entry stores its original path, deletion time, owner and size.",
-      "Restore refuses to overwrite an item already present at the original path.",
+      "Delete in File Explorer moves an item into the current user's private wFileManager trash.",
+      "Each entry stores its original path, deletion time, actor and measured size.",
+      "Restore refuses to overwrite an existing item at the original path.",
       "Permanent delete and Empty trash cannot be undone.",
     ],
   },
@@ -149,17 +163,17 @@ const SECTIONS: DocSection[] = [
     id: "terminal",
     category: "Administration",
     title: "Administrator terminal",
-    summary: "Use a real PTY shell reserved for wFileManager administrators.",
+    summary: "Use a root PTY shell reserved for administrators.",
     icon: TerminalSquare,
     route: "/terminal",
     details: [
-      "The Terminal entry appears only for administrators and every terminal API request verifies administrator status.",
-      "A dedicated Linux account is created only when an administrator opens the terminal.",
-      "Ordinary application users are never provisioned as Linux users and never added to sudo.",
-      "Switch to root requires verification of the current administrator password.",
-      "Terminal tabs are independent PTY sessions and expire after inactivity.",
+      "Terminal is shown under Administration and is visible only to administrators.",
+      "Every terminal API request verifies administrator status.",
+      "Opening a session requires the current wFileManager administrator password again.",
+      "The shell runs directly as root; wFileManager does not create a dedicated Linux user and does not add application users to sudo.",
+      "The server limits concurrent sessions, terminal input, retained output and idle duration.",
     ],
-    notes: [{ tone: "danger", title: "Root shell", body: "A root terminal can modify or delete any server file. Commands are executed immediately and are not reversible by wFileManager." }],
+    notes: [{ tone: "danger", title: "Root shell", body: "Root commands affect the entire server immediately and are not reversible by wFileManager." }],
   },
   {
     id: "users",
@@ -170,23 +184,23 @@ const SECTIONS: DocSection[] = [
     route: "/users",
     details: [
       "Administrators can create users with a display name, username, optional email, password and role.",
-      "Application accounts are separate from operating-system accounts.",
-      "Creating, signing in or changing the password of an ordinary user does not create a Linux user or grant sudo.",
-      "Deleting a user revokes sessions and removes private application data without deleting server files.",
+      "Application accounts remain separate from operating-system accounts.",
+      "Signing in or changing an application password never creates a Linux user and never grants sudo.",
+      "Deleting a user revokes sessions and removes private application records without deleting server files.",
     ],
   },
   {
     id: "roles",
     category: "Administration",
     title: "Roles and permissions",
-    summary: "Control which file-management actions each user can perform.",
+    summary: "Control which file-management actions each user may perform.",
     icon: UserCog,
     route: "/roles",
     details: [
       "System roles provide ready-to-use permission sets and custom roles can be created.",
       "Permissions cover browsing, reading, uploading, downloading, editing, moving, deleting and administration.",
       "The Administrator role retains complete application access.",
-      "Root terminal access is an administrator capability and is not granted by an ordinary role permission.",
+      "Root terminal access is an administrator capability and cannot be granted through an ordinary role permission.",
     ],
   },
   {
@@ -212,7 +226,7 @@ const SECTIONS: DocSection[] = [
     details: [
       "Update your display name, email address and timezone from Account.",
       "The wFileManager password is separate from Linux credentials.",
-      "Changing it revokes other application sessions but does not change an operating-system password.",
+      "Changing it revokes other application sessions but does not modify an operating-system password.",
       "Revoke a single session or sign out all devices when a device is no longer trusted.",
     ],
   },
@@ -224,10 +238,10 @@ const SECTIONS: DocSection[] = [
     icon: RefreshCw,
     route: "/about",
     details: [
-      "The About & updates page displays the installed and latest stable versions.",
-      "Release archives are verified by SHA-256 and size before extraction.",
-      "The updater builds a separate release, switches atomically and checks the application, database and persistent filesystem.",
-      "A failed health check automatically restores the previous release.",
+      "About & updates displays the installed and latest stable versions.",
+      "Release archives are verified by SHA-256, byte size, paths and entry types before extraction.",
+      "The updater tests and builds a separate release before switching the current symlink.",
+      "Application, database and persistent-filesystem checks run after restart; an unhealthy release is rolled back automatically.",
     ],
   },
   {
@@ -238,11 +252,11 @@ const SECTIONS: DocSection[] = [
     icon: AlertTriangle,
     details: [
       "Confirm absolute paths before copy, move, delete, chmod or terminal operations.",
-      "Keep backups of application data, databases and configuration files outside the managed server.",
-      "Do not expose the internal Node port directly; access wFileManager through HTTPS and Nginx.",
+      "Keep independent backups of application data, databases and configuration files.",
+      "Do not expose the internal Node port; access the application through HTTPS and Nginx.",
       "Writes through symbolic-link path components and writes to /proc, /sys, /dev and /run are blocked by default.",
     ],
-    notes: [{ tone: "danger", title: "Elevated privileges", body: "wFileManager manages real server data. Incorrect administrator actions can cause permanent data loss or system compromise." }],
+    notes: [{ tone: "danger", title: "Elevated privileges", body: "wFileManager manages real server files. Incorrect administrator actions can cause permanent data loss or system compromise." }],
   },
   {
     id: "troubleshooting",
@@ -251,10 +265,10 @@ const SECTIONS: DocSection[] = [
     summary: "Check the service, proxy and health endpoint when an operation fails.",
     icon: Info,
     details: [
-      "Check the service with systemctl status wfilemanager and journalctl -u wfilemanager -n 100 --no-pager.",
-      "Verify application health with curl -fsS http://127.0.0.1:1973/api/health.",
-      "Validate the proxy with nginx -t and confirm that the service listens on 127.0.0.1:1973.",
-      "Permission denied usually means the role lacks the action or Linux rejected access to the path.",
+      "Inspect the wfilemanager.service status and its system journal.",
+      "The local /api/health endpoint checks application metadata, the selected database backend and persistent filesystem access.",
+      "Validate the Nginx configuration and confirm that the application listens only on 127.0.0.1:1973.",
+      "Permission denied usually means the role lacks the action or Linux rejected access to the selected path.",
     ],
   },
 ];
@@ -272,7 +286,10 @@ function Docs() {
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>("All");
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return SECTIONS.filter((section) => (category === "All" || section.category === category) && (!needle || `${section.title} ${section.summary} ${section.details.join(" ")}`.toLowerCase().includes(needle)));
+    return SECTIONS.filter((section) =>
+      (category === "All" || section.category === category)
+      && (!needle || `${section.title} ${section.summary} ${section.details.join(" ")}`.toLowerCase().includes(needle)),
+    );
   }, [category, query]);
 
   return (
