@@ -20,8 +20,12 @@ export async function setupWFileManager(data: SetupPayload) {
     },
     body: JSON.stringify({
       ...data,
-      ...(DATABASE_MODE === "supabase" && ROOT_RESET_TOKEN_HASH
-        ? { rootResetTokenHash: ROOT_RESET_TOKEN_HASH }
+      ...(DATABASE_MODE === "supabase"
+        ? {
+            rootResetTokenHash: ROOT_RESET_TOKEN_HASH,
+            hostname: typeof window !== "undefined" ? window.location.hostname : undefined,
+            baseUrl: typeof window !== "undefined" ? window.location.origin : undefined,
+          }
         : {}),
     }),
   });
