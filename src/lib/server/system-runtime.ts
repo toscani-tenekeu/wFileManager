@@ -39,7 +39,7 @@ export async function systemSummary() {
       const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
       if (!match) continue;
       const raw = match[2].trim();
-      osRelease[match[1]] = raw.replace(/^(=["'])(.*)\1$/, "$2");
+      osRelease[match[1]] = raw.replace(/^(^["'])(.*)\1$/, "$2");
     }
   } catch {
     osRelease = {};
