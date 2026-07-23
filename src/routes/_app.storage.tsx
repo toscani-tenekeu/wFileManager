@@ -24,6 +24,13 @@ const CHART_COLORS = [
   "var(--chart-5)",
 ];
 
+type ScopedStorageMount = StorageMount & {
+  scope?: "server" | "filesystem";
+  capacitySource?: "configured" | "quota" | "filesystem" | "server-usage";
+  capacityReliable?: boolean;
+  inodesReliable?: boolean;
+};
+
 function Storage() {
   const [mounts, setMounts] = useState<StorageMount[]>([]);
   const [primary, setPrimary] = useState<StorageMount | null>(null);
@@ -68,7 +75,7 @@ function Storage() {
       <div className="mb-5 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <HardDrive className="h-5 w-5" />
-          <div><h1 className="text-xl font-semibold tracking-tight">Storage</h1><p className="text-sm text-muted-foreground">Volumes, filesystem item distribution and real Linux home-directory usage.</p></div>
+          <div><h1 className="text-xl font-semibold tracking-tight">Storage</h1><p className="text-sm text-muted-foreground">Server capacity, inode usage, filesystem item distribution and real Linux home-directory usage.</p></div>
         </div>
         <Button size="sm" variant="outline" onClick={() => void load(true)} disabled={loading}><RefreshCw className={`mr-2 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh</Button>
       </div>
@@ -80,7 +87,7 @@ function Storage() {
         <Card><CardContent className="p-3"><div className="flex items-center justify-between text-[11px] text-muted-foreground"><span>Storage volumes</span><Database className="h-3.5 w-3.5" /></div><div className="mt-0.5 text-xl font-semibold">{volumeCount.toLocaleString()}</div></CardContent></Card>
         <Card><CardContent className="p-3"><div className="flex items-center justify-between text-[11px] text-muted-foreground"><span>Files</span><Files className="h-3.5 w-3.5" /></div><div className="mt-0.5 text-xl font-semibold">{analysis ? analysis.totalFiles.toLocaleString() : "—"}</div></CardContent></Card>
         <Card><CardContent className="p-3"><div className="flex items-center justify-between text-[11px] text-muted-foreground"><span>Folders</span><FolderTree className="h-3.5 w-3.5" /></div><div className="mt-0.5 text-xl font-semibold">{analysis ? analysis.totalDirectories.toLocaleString() : "—"}</div></CardContent></Card>
-        <Card><CardContent className="p-3"><div className="flex items-center justify-between text-[11px] text-muted-foreground"><span>Available storage</span><HardDrive className="h-3.5 w-3.5" /></div><div className="mt-0.5 text-xl font-semibold">{primary ? formatBytes(primary.available) : "—"}</div></CardContent></Card>
+        <Card><CardContent className="p-3"><div className="flex items-center justify-between text-[11px] text-muted-foreground"><span>Available storage</span><HardDrive className="h-3.5 w-3.5" /></div><div className="mt-0.5 text-xl font-semibold">{primary && primary.total > 0 ? formatBytes(primary.available) : "—"}</div></CardContent></Card>
       </div>
 
       <div className="mb-4 grid gap-4 lg:grid-cols-2">
@@ -179,7 +186,7 @@ function Storage() {
         </CardContent>
       </Card>
 
-      {generatedAt && <div className="mb-2 text-right text-[11px] text-muted-foreground">Volume information updated {formatRelative(generatedAt)}</div>}
+      {generatedAt && <div className="mb-2 text-right text-[11px] text-muted-foreground">Storage information updated {formatRelative(generatedAt)}</div>}
 
       <div className="grid gap-3">
         {loading && mounts.length === 0 ? (
@@ -187,14 +194,16 @@ function Storage() {
         ) : mounts.length === 0 ? (
           <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">No usable storage volume was detected.</CardContent></Card>
         ) : mounts.map((mount) => {
+          const scopedMount = mount as ScopedStorageMount;
           const warning = mount.health !== "healthy";
+          const serverRoot = scopedMount.scope === "server";
           return (
             <Card key={`${mount.device}:${mount.mountpoint}`}>
               <CardHeader className="px-4 pb-2 pt-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <CardTitle className="flex items-center gap-2 font-mono text-sm"><Database className="h-3.5 w-3.5 text-primary" /> {mount.mountpoint}</CardTitle>
-                    <CardDescription className="mt-1 break-all text-xs">{mount.device} · {mount.fstype} · {mount.options}</CardDescription>
+                    <CardDescription className="mt-1 break-all text-xs">{serverRoot ? `Server root storage · ${mount.fstype}` : `${mount.device} · ${mount.fstype} · ${mount.options}`}</CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
                     {mount.readonly && <Badge variant="outline" className="h-5 text-[10px]">read-only</Badge>}
@@ -207,17 +216,22 @@ function Storage() {
               </CardHeader>
               <CardContent className="space-y-3 px-4 pb-4">
                 <div>
-                  <div className="mb-1 flex items-center justify-between gap-4 text-[11px]"><span className="text-muted-foreground">Disk usage</span><span className="font-mono">{formatBytes(mount.used)} / {formatBytes(mount.total)} · {mount.percent}%</span></div>
-                  <Progress value={mount.percent} className="h-1.5" />
-                  <div className="mt-1 text-right text-[10px] text-muted-foreground">{formatBytes(mount.available)} available</div>
+                  <div className="mb-1 flex items-center justify-between gap-4 text-[11px]"><span className="text-muted-foreground">Storage usage</span><span className="font-mono">{formatBytes(mount.used)} / {mount.total > 0 ? formatBytes(mount.total) : "—"}{mount.total > 0 ? ` · ${mount.percent}%` : ""}</span></div>
+                  <Progress value={mount.total > 0 ? mount.percent : 0} className="h-1.5" />
+                  <div className="mt-1 text-right text-[10px] text-muted-foreground">{mount.total > 0 ? `${formatBytes(mount.available)} free` : `${formatBytes(mount.used)} used`}</div>
                 </div>
-                {mount.inodesTotal > 0 && (
+                {mount.inodesTotal > 0 ? (
                   <div>
                     <div className="mb-1 flex items-center justify-between gap-4 text-[11px]"><span className="text-muted-foreground">Inodes</span><span className="font-mono">{mount.inodesUsed.toLocaleString()} / {mount.inodesTotal.toLocaleString()} · {mount.inodePercent}%</span></div>
                     <Progress value={mount.inodePercent} className="h-1.5" />
-                    <div className="mt-1 text-right text-[10px] text-muted-foreground">{mount.inodesAvailable.toLocaleString()} available</div>
+                    <div className="mt-1 text-right text-[10px] text-muted-foreground">{mount.inodesAvailable.toLocaleString()} free</div>
                   </div>
-                )}
+                ) : mount.inodesUsed > 0 ? (
+                  <div className="flex items-center justify-between gap-4 border-t border-border/70 pt-2 text-[11px]">
+                    <span className="text-muted-foreground">Inodes used</span>
+                    <span className="font-mono">{mount.inodesUsed.toLocaleString()}</span>
+                  </div>
+                ) : null}
                 {warning && (
                   <div className={mount.health === "critical" ? "flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-[11px]" : "flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-1.5 text-[11px]"}>
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
