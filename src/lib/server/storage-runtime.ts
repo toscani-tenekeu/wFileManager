@@ -120,6 +120,7 @@ async function measuredRootInodes() {
     });
     let count = 0;
     let settled = false;
+    let timer: NodeJS.Timeout;
     const finish = (value: number | null) => {
       if (settled) return;
       settled = true;
@@ -129,7 +130,7 @@ async function measuredRootInodes() {
     child.stdout.on("data", (chunk: Buffer) => { count += chunk.length; });
     child.on("error", () => finish(null));
     child.on("close", (code) => finish(code === 0 || code === 1 ? count : null));
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       child.kill("SIGTERM");
       finish(null);
     }, 30_000);
@@ -214,10 +215,11 @@ finally:
       env: { ...process.env, LC_ALL: "C" },
     });
     const value = JSON.parse(stdout) as Partial<ProjectQuota>;
-    if (!Number.isFinite(value.total) || Number(value.total) <= 0) return null;
+    const total = Number(value.total);
+    if (!Number.isFinite(total) || total <= 0) return null;
     return {
       projectId: Number(value.projectId) || 0,
-      total: Number(value.total),
+      total,
       used: Math.max(0, Number(value.used) || 0),
       inodesTotal: Math.max(0, Number(value.inodesTotal) || 0),
       inodesUsed: Math.max(0, Number(value.inodesUsed) || 0),
