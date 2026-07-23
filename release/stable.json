@@ -2,14 +2,14 @@
   "schema": 1,
   "product": "wfilemanager",
   "channel": "stable",
-  "version": "0.7.1",
-  "publishedAt": "2026-07-22T15:56:40Z",
-  "sourceCommit": "863a1259f496e0b6fba0d0777b9dd7a40e53c163",
+  "version": "0.7.2",
+  "publishedAt": "2026-07-23T00:14:51.392Z",
+  "sourceCommit": "90aa3624114b89a74904f187b373c2b0293d40d5",
   "minimumVersion": "0.6.0",
-  "releaseUrl": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.7.1.tar.gz",
-  "url": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.7.1.tar.gz",
-  "sha256": "b1ef4f530157586e3ea143041877c60c1d4325e59f407d4ebb5dffbb3cf21198",
-  "size": 260147,
+  "releaseUrl": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.7.2.tar.gz",
+  "url": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/wfilemanager-0.7.2.tar.gz",
+  "sha256": "e623475e00e7bf9c8ac6590df458da0da248592c0e9c7ecd865bd3294953e21d",
+  "size": 262627,
   "installUrl": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/install.sh",
   "canonicalBaseUrl": "https://releases.kmerhosting.com/wfilemanager",
   "githubUrl": "https://github.com/toscani-tenekeu/wFileManager",
@@ -23,7 +23,7 @@
     "virtualization": [
       "bare-metal",
       "KVM",
-      "LXC with systemd and root access"
+      "containerized environments with systemd and root access"
     ],
     "domainRequired": true
   },
@@ -32,12 +32,12 @@
     "local SQLite"
   ],
   "notes": [
-    "Checks systemd health before modifying the server and again after package installation.",
-    "Stops with a clear reboot-and-retry message when systemd or D-Bus is unresponsive.",
-    "Reprompts for an empty or invalid domain instead of exiting with an unclear error.",
-    "Adds APT retries and network timeouts for slow Ubuntu mirrors.",
-    "Prevents needrestart from attempting automatic service restarts during dependency installation.",
-    "Preserves the selected domain, database mode and instance identity when installation is resumed."
+    "Replaces Root storage with Server storage on the Overview page.",
+    "Hides external host filesystem totals when the server capacity cannot be measured reliably.",
+    "Shows locally measured server usage and supports an explicit WFILEMANAGER_STORAGE_CAPACITY_BYTES limit.",
+    "Routes system telemetry through a server-scoped runtime and uses cgroup-aware memory limits.",
+    "Clarifies that managed Supabase is intended for fast setup and testing with a 100 MB data limit per server.",
+    "Recommends local SQLite and a dedicated domain for durable long-term installations."
   ],
   "assets": {
     "installer": "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/install.sh",
