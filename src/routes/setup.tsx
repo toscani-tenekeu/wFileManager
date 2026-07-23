@@ -10,7 +10,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CircleCheck, Server, User } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
-import { localApi } from "@/lib/local-api";
 import {
   ADMIN_PASSWORD_POLICY_TEXT,
   administratorPasswordError,
@@ -70,7 +69,8 @@ function Setup() {
 
       {current.key === "welcome" && (
         <Card><CardContent className="space-y-3 pt-6 text-sm">
-          <p>This creates the first administrator for this wFileManager installation. The account is stored in standard prefixed tables, not Supabase Auth.</p>
+          <p>This creates the first administrator for this wFileManager installation. The account is stored in the selected application database and is separate from Linux system accounts.</p>
+          <p className="text-muted-foreground">Administrator terminal access requires re-entering this application password and does not create a dedicated Linux user.</p>
         </CardContent></Card>
       )}
 
@@ -94,6 +94,7 @@ function Setup() {
           <dt className="text-muted-foreground">Administrator</dt><dd className="col-span-2">{form.name} ({form.username})</dd>
           <dt className="text-muted-foreground">Email</dt><dd className="col-span-2">{form.email || "Not set"}</dd>
           <dt className="text-muted-foreground">Access</dt><dd className="col-span-2">Full administrator access to this instance</dd>
+          <dt className="text-muted-foreground">Linux account</dt><dd className="col-span-2">No Linux user is created</dd>
         </dl></CardContent></Card>
       )}
 
@@ -112,11 +113,6 @@ function Setup() {
                 email: form.email || undefined,
                 password: form.password,
               });
-              try {
-                await localApi.provisionSelf(form.password);
-              } catch (provisionError) {
-                toast.warning(provisionError instanceof Error ? `Administrator created, but Linux account setup failed: ${provisionError.message}` : "Administrator created, but Linux account setup failed");
-              }
               toast.success("wFileManager setup completed");
               nav({ to: "/" });
             } catch (e) {
