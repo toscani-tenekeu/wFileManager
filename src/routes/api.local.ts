@@ -34,6 +34,10 @@ async function archiveGuard() {
   return import("@/lib/server/archive-guard");
 }
 
+async function terminalRuntime() {
+  return import("@/lib/server/terminal-runtime");
+}
+
 async function handleError(error: unknown) {
   const { LocalApiError } = await runtime();
   if (error instanceof LocalApiError) return json({ error: error.message }, error.status);
@@ -75,11 +79,13 @@ export const Route = createFileRoute("/api/local")({
           }
           if (action === "terminal-user") {
             const user = await auth.requireAdmin(request);
-            return json(await api.terminalIdentity(user));
+            const terminal = await terminalRuntime();
+            return json(terminal.terminalIdentity(user));
           }
           if (action === "pty-output") {
             const user = await auth.requireAdmin(request);
-            return json(api.readPtyOutput(user.id, url.searchParams.get("id"), url.searchParams.get("cursor")));
+            const terminal = await terminalRuntime();
+            return json(terminal.readPtyOutput(user.id, url.searchParams.get("id"), url.searchParams.get("cursor")));
           }
           if (action === "job") {
             const user = await auth.requireUser(request);
@@ -116,14 +122,15 @@ export const Route = createFileRoute("/api/local")({
 
           if (["pty-create", "pty-input", "pty-resize", "pty-close"].includes(action)) {
             const user = await auth.requireAdmin(request);
+            const terminal = await terminalRuntime();
             const body = await request.json().catch(() => ({})) as Record<string, unknown>;
             if (action === "pty-create") {
-              if (String(body.mode || "user") === "root") await auth.verifyCurrentPassword(request, body.password);
-              return json(await api.createPtySession(user, body.cwd, body.cols, body.rows, body.mode), 201);
+              await auth.verifyCurrentPassword(request, body.password);
+              return json(await terminal.createRootPtySession(user, body.cwd, body.cols, body.rows), 201);
             }
-            if (action === "pty-input") return json(api.writePty(user.id, body.sessionId, body.data));
-            if (action === "pty-resize") return json(api.resizePty(user.id, body.sessionId, body.cols, body.rows));
-            return json(api.closePty(user.id, body.sessionId));
+            if (action === "pty-input") return json(terminal.writePty(user.id, body.sessionId, body.data));
+            if (action === "pty-resize") return json(terminal.resizePty(user.id, body.sessionId, body.cols, body.rows));
+            return json(terminal.closePty(user.id, body.sessionId));
           }
 
           if (action === "upload-raw") {
@@ -154,9 +161,9 @@ export const Route = createFileRoute("/api/local")({
             else if (body.mode === "folder") destination = await safe.assertSafeDestination(path.join(parent, String(body.folderName || "extracted")));
             else await safe.assertSafeDirectory(parent);
             const guard = await archiveGuard();
-            await guard.inspectArchiveSafety(archivePath, body.mode === "folder" ? parent : destination);
+            await guard.inspectArchiveSafety(archivePath, destination);
             const archive = await archiveRuntime();
-            return json(await archive.extractArchive(archivePath, body.mode, body.folderName, body.destination, body.conflictPolicy), 201);
+            return json(await archive.extractArchive(archivePath, body.mode, body.folderName, destination, body.conflictPolicy), 201);
           }
           if (action === "update-install") {
             await auth.requireAdmin(request);
@@ -178,8 +185,8 @@ export const Route = createFileRoute("/api/local")({
           }
           if (action === "save") {
             await auth.requirePermission(request, "edit");
-            await safe.assertSafeExistingMutation(body.path);
-            return json(await api.saveTextFile(body.path, body.content));
+            const target = await safe.assertSafeExistingMutation(body.path);
+            return json(await api.saveTextFile(target, body.content));
           }
           if (action === "rename") {
             await auth.requirePermission(request, "rename");
