@@ -9,7 +9,6 @@ import { useTheme } from "@/lib/theme";
 import { AppSidebar } from "./sidebar";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
-import { localApi } from "@/lib/local-api";
 import { wfilemanagerApi } from "@/lib/wfilemanager-api";
 import { useNotifications } from "@/lib/notifications";
 import { formatRelative } from "@/lib/format";
@@ -125,7 +124,8 @@ export function ConnectionBanner() {
     let active = true;
     const refresh = async () => {
       try {
-        await localApi.system();
+        const health = await fetch("/api/health?scope=application", { cache: "no-store" });
+        if (!health.ok) throw new Error("Application health check failed");
         const presence = await wfilemanagerApi.onlineUsers();
         if (!active) return;
         setOnlineUsers(presence.onlineUsers);
