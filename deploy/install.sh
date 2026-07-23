@@ -12,6 +12,7 @@ ROOT_RESET_KEY_FILE="$CONFIG_DIR/root-reset.key"
 STATE_ROOT="/var/lib/wfilemanager"
 PACKAGES_FILE="$STATE_ROOT/installed-packages.txt"
 INSTALL_STATE_FILE="$STATE_ROOT/install-state.env"
+HEALTH_URL="http://127.0.0.1:$PORT/api/health"
 
 [[ $EUID -eq 0 ]] || { echo "Run this installer with sudo or as root." >&2; exit 1; }
 [[ -r /etc/os-release ]] || { echo "Unable to identify the operating system." >&2; exit 1; }
@@ -26,7 +27,7 @@ systemd_failure() {
 The server system manager is not healthy ($phase; state: $state).
 wFileManager cannot safely install or manage services while systemd is unavailable.
 Reboot the VPS, wait for SSH to return, then run the same official install command again.
-The installer is idempotent and will reuse the selected domain, database mode and instance identity.
+The installer is idempotent and reuses the selected domain, database mode and instance identity.
 TEXT
   exit 1
 }
@@ -52,9 +53,7 @@ check_systemd() {
 run_systemctl() {
   local description="$1"
   shift
-  if ! timeout 45 systemctl "$@"; then
-    systemd_failure "$description" "unresponsive"
-  fi
+  timeout 45 systemctl "$@" || systemd_failure "$description" "unresponsive"
 }
 
 valid_domain() {
@@ -64,6 +63,19 @@ value = sys.argv[1]
 if len(value) > 253 or not re.fullmatch(r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}", value):
     raise SystemExit(1)
 PY
+}
+
+verify_asset() {
+  local url="$1" sha="$2" destination="$3"
+  [[ "$url" == https://* && "$sha" =~ ^[a-fA-F0-9]{64}$ ]] || { echo "The stable manifest contains an invalid asset." >&2; exit 1; }
+  curl -fsSL --retry 3 --connect-timeout 15 "$url" -o "$destination"
+  printf '%s  %s\n' "${sha,,}" "$destination" | sha256sum -c -
+}
+
+health_ready() {
+  local response=""
+  response="$(curl -fsS --max-time 5 "$HEALTH_URL" 2>/dev/null || true)"
+  [[ -n "$response" ]] && jq -e '.ok == true and .status == "healthy"' >/dev/null 2>&1 <<<"$response"
 }
 
 check_systemd "before installation"
@@ -82,9 +94,7 @@ while true; do
   DOMAIN="${DOMAIN,,}"
   DOMAIN="${DOMAIN#"${DOMAIN%%[![:space:]]*}"}"
   DOMAIN="${DOMAIN%"${DOMAIN##*[![:space:]]}"}"
-  if [[ -n "$DOMAIN" ]] && valid_domain "$DOMAIN"; then
-    break
-  fi
+  [[ -n "$DOMAIN" ]] && valid_domain "$DOMAIN" && break
   [[ -r /dev/tty ]] || { echo "A valid domain is required. Run with DOMAIN=files.example.com." >&2; exit 1; }
   if [[ -z "$DOMAIN" ]]; then
     cat >/dev/tty <<'TEXT'
@@ -95,9 +105,6 @@ TEXT
     echo "The domain '$DOMAIN' is invalid. Enter a complete domain such as files.example.com." >/dev/tty
   fi
   read -r -p "Domain (example: files.example.com): " DOMAIN </dev/tty
-  if [[ -z "$DOMAIN" ]]; then
-    echo "A domain is required. Press Ctrl+C to cancel." >/dev/tty
-  fi
 done
 
 DATABASE_MODE="${WFILEMANAGER_DATABASE_MODE:-$EXISTING_MODE}"
@@ -108,7 +115,7 @@ while [[ "$DATABASE_MODE" != "supabase" && "$DATABASE_MODE" != "sqlite" ]]; do
 Choose where wFileManager stores accounts, roles, sessions and notifications:
 
 1) KmerHosting managed Supabase
-   Automatically configured. Authentication data is stored in KmerHosting's Supabase project.
+   Automatically configured for rapid testing and setup.
 
 2) SQLite on this VPS
    Fully local. Data is stored in /var/lib/wfilemanager/wfilemanager.db.
@@ -167,13 +174,12 @@ check_systemd "after package installation"
 ADDED_NODESOURCE=false
 if ! command -v node >/dev/null 2>&1 || [[ "$(node -p 'Number(process.versions.node.split(`.`)[0])' 2>/dev/null || echo 0)" -lt 24 ]]; then
   curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
-  if ! dpkg-query -W -f='${Status}' nodejs 2>/dev/null | grep -q 'install ok installed'; then
-    echo nodejs >>"$TMP/packages-to-remove.txt"
-  fi
+  dpkg-query -W -f='${Status}' nodejs 2>/dev/null | grep -q 'install ok installed' || echo nodejs >>"$TMP/packages-to-remove.txt"
   DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get "${APT_OPTIONS[@]}" install -y nodejs
   ADDED_NODESOURCE=true
   check_systemd "after Node.js installation"
 fi
+
 INSTALLED_BUN=false
 if ! command -v bun >/dev/null 2>&1; then
   curl -fsSL https://bun.sh/install | bash
@@ -182,8 +188,7 @@ fi
 export PATH="/root/.bun/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 install -d -m 755 "$APP_ROOT/releases" "$CONFIG_DIR" /usr/local/lib/wfilemanager
-install -d -m 700 "$STATE_ROOT/trash" "$STATE_ROOT/update"
-if [[ "$DATABASE_MODE" == "sqlite" ]]; then install -d -m 700 "$STATE_ROOT"; fi
+install -d -m 700 "$STATE_ROOT" "$STATE_ROOT/trash" "$STATE_ROOT/update"
 
 INSTANCE_KEY="${WFILEMANAGER_INSTANCE_KEY:-$EXISTING_INSTANCE_KEY}"
 if [[ -z "$INSTANCE_KEY" ]]; then
@@ -198,9 +203,6 @@ fi
 chmod 600 "$ROOT_RESET_KEY_FILE"
 ROOT_RESET_HASH="$(tr -d '\r\n' <"$ROOT_RESET_KEY_FILE" | sha256sum | awk '{print $1}')"
 
-SERVER_AUTH_URL="$PUBLIC_SUPABASE_URL"
-[[ "$DATABASE_MODE" == "sqlite" ]] && SERVER_AUTH_URL="http://127.0.0.1:$PORT/api/sqlite-proxy"
-
 cat >"$ENV_FILE" <<ENV
 PORT=$PORT
 WFILEMANAGER_DOMAIN=$DOMAIN
@@ -210,15 +212,16 @@ VITE_WFILEMANAGER_DATABASE_MODE=$DATABASE_MODE
 VITE_SUPABASE_URL=$PUBLIC_SUPABASE_URL
 VITE_WFILEMANAGER_INSTANCE_KEY=$INSTANCE_KEY
 VITE_WFILEMANAGER_ROOT_RESET_TOKEN_HASH=$ROOT_RESET_HASH
-WFILEMANAGER_SUPABASE_URL=$SERVER_AUTH_URL
+WFILEMANAGER_SUPABASE_URL=$PUBLIC_SUPABASE_URL
 WFILEMANAGER_INSTANCE_KEY=$INSTANCE_KEY
 WFILEMANAGER_SQLITE_PATH=$STATE_ROOT/wfilemanager.db
 WFILEMANAGER_ALLOW_PSEUDO_FS_WRITE=false
 WFILEMANAGER_TRASH_DIR=$STATE_ROOT/trash
+WFILEMANAGER_STATE_ROOT=$STATE_ROOT
 WFILEMANAGER_UPDATE_MANIFEST_URL=$MANIFEST_URL
 WFILEMANAGER_UPDATE_STATE_FILE=$STATE_ROOT/update/state.json
 WFILEMANAGER_UPDATE_SCRIPT=/usr/local/lib/wfilemanager/update.sh
-WFILEMANAGER_HEALTH_URL=http://127.0.0.1:$PORT/
+WFILEMANAGER_HEALTH_URL=$HEALTH_URL
 WFILEMANAGER_SERVICE=wfilemanager.service
 ENV
 chmod 600 "$ENV_FILE"
@@ -235,29 +238,24 @@ chmod 600 "$PACKAGES_FILE" "$INSTALL_STATE_FILE"
 curl -fsSL --retry 3 "$MANIFEST_URL" -o "$TMP/stable.json"
 UPDATER_ASSET="$(jq -r '.assets.updater // empty' "$TMP/stable.json")"
 UPDATER_SHA="$(jq -r '.assets.updaterSha256 // empty' "$TMP/stable.json")"
-[[ "$UPDATER_ASSET" == https://* && "$UPDATER_SHA" =~ ^[a-fA-F0-9]{64}$ ]] || { echo "The stable manifest does not contain a valid updater asset." >&2; exit 1; }
-curl -fsSL --retry 3 "$UPDATER_ASSET" -o /usr/local/lib/wfilemanager/update.sh
-printf '%s  %s\n' "${UPDATER_SHA,,}" /usr/local/lib/wfilemanager/update.sh | sha256sum -c -
-chmod 750 /usr/local/lib/wfilemanager/update.sh
-
 UPDATER_SERVICE_URL="$(jq -r '.assets.updaterService // empty' "$TMP/stable.json")"
 UPDATER_SERVICE_SHA="$(jq -r '.assets.updaterServiceSha256 // empty' "$TMP/stable.json")"
 APP_SERVICE_URL="$(jq -r '.assets.appService // empty' "$TMP/stable.json")"
 APP_SERVICE_SHA="$(jq -r '.assets.appServiceSha256 // empty' "$TMP/stable.json")"
-[[ "$UPDATER_SERVICE_URL" == https://* && "$UPDATER_SERVICE_SHA" =~ ^[a-fA-F0-9]{64}$ ]] || exit 1
-[[ "$APP_SERVICE_URL" == https://* && "$APP_SERVICE_SHA" =~ ^[a-fA-F0-9]{64}$ ]] || exit 1
-curl -fsSL --retry 3 "$UPDATER_SERVICE_URL" -o /etc/systemd/system/wfilemanager-updater@.service
-curl -fsSL --retry 3 "$APP_SERVICE_URL" -o /etc/systemd/system/wfilemanager.service
-printf '%s  %s\n' "${UPDATER_SERVICE_SHA,,}" /etc/systemd/system/wfilemanager-updater@.service | sha256sum -c -
-printf '%s  %s\n' "${APP_SERVICE_SHA,,}" /etc/systemd/system/wfilemanager.service | sha256sum -c -
+
+verify_asset "$UPDATER_ASSET" "$UPDATER_SHA" /usr/local/lib/wfilemanager/update.sh
+verify_asset "$UPDATER_SERVICE_URL" "$UPDATER_SERVICE_SHA" /etc/systemd/system/wfilemanager-updater@.service
+verify_asset "$APP_SERVICE_URL" "$APP_SERVICE_SHA" /etc/systemd/system/wfilemanager.service
+chmod 750 /usr/local/lib/wfilemanager/update.sh
+
 check_systemd "before service registration"
 run_systemctl "while reloading systemd" daemon-reload
 run_systemctl "while enabling wFileManager" enable wfilemanager.service
-if ! /usr/local/lib/wfilemanager/update.sh install; then
+/usr/local/lib/wfilemanager/update.sh install || {
   check_systemd "while installing the application release"
   echo "The application release could not be installed. Rerun the same command after correcting the reported error." >&2
   exit 1
-fi
+}
 
 CURRENT_RELEASE="$(readlink -f "$APP_ROOT/current")"
 install -m 700 "$CURRENT_RELEASE/deploy/wfilemanager-reset-admin-password" /usr/local/sbin/wfilemanager-reset-admin-password
@@ -293,14 +291,13 @@ run_systemctl "while starting Nginx" enable --now nginx
 run_systemctl "while reloading Nginx" reload nginx
 
 certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect || {
-  echo "HTTPS setup failed. The application was installed but will not be considered ready without TLS." >&2
-  echo "Verify ports 80/443 and the A record, then rerun the installer." >&2
+  echo "HTTPS setup failed. Verify ports 80/443 and the A record, then rerun the installer." >&2
   exit 1
 }
 
 READY=false
-for attempt in $(seq 1 40); do
-  if timeout 5 systemctl is-active --quiet wfilemanager.service && curl -fsS --max-time 3 "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then READY=true; break; fi
+for _ in $(seq 1 40); do
+  if timeout 5 systemctl is-active --quiet wfilemanager.service && health_ready; then READY=true; break; fi
   sleep 1
 done
 if [[ "$READY" != "true" ]]; then

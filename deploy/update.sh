@@ -13,7 +13,7 @@ PREVIOUS_FILE="$STATE_DIR/previous-release"
 LOCK_FILE="$STATE_DIR/update.lock"
 MANIFEST_URL="${WFILEMANAGER_UPDATE_MANIFEST_URL:-https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/stable.json}"
 SERVICE="${WFILEMANAGER_SERVICE:-wfilemanager.service}"
-HEALTH_URL="${WFILEMANAGER_HEALTH_URL:-http://127.0.0.1:${PORT:-1973}/}"
+HEALTH_URL="${WFILEMANAGER_HEALTH_URL:-http://127.0.0.1:${PORT:-1973}/api/health}"
 KEEP_RELEASES="${WFILEMANAGER_KEEP_RELEASES:-3}"
 ROOT_RESET_COMMAND="${WFILEMANAGER_ROOT_RESET_COMMAND:-/usr/local/sbin/wfilemanager-reset-admin-password}"
 UNINSTALL_COMMAND="${WFILEMANAGER_UNINSTALL_COMMAND:-/usr/local/sbin/wfilemanager-uninstall}"
@@ -24,7 +24,6 @@ exec 9>"$LOCK_FILE"
 flock -n 9 || { echo "Another wFileManager update is already running" >&2; exit 75; }
 
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
-json_escape() { jq -Rn --arg value "$1" '$value'; }
 state() {
   local status="$1" progress="$2" message="$3" target="${4:-}" error="${5:-}"
   local current="" previous=""
@@ -60,13 +59,16 @@ load_env() {
     source "$ENV_FILE"
     set +a
   fi
-  HEALTH_URL="${WFILEMANAGER_HEALTH_URL:-http://127.0.0.1:${PORT:-1973}/}"
+  HEALTH_URL="${WFILEMANAGER_HEALTH_URL:-http://127.0.0.1:${PORT:-1973}/api/health}"
 }
 
 health_check() {
-  local tries=30
+  local tries=30 response=""
   while (( tries > 0 )); do
-    if curl -fsS --max-time 5 "$HEALTH_URL" >/dev/null 2>&1; then return 0; fi
+    response="$(curl -fsS --max-time 5 "$HEALTH_URL" 2>/dev/null || true)"
+    if [[ -n "$response" ]] && jq -e '.ok == true and .status == "healthy"' >/dev/null 2>&1 <<<"$response"; then
+      return 0
+    fi
     sleep 1
     ((tries--))
   done
@@ -87,12 +89,8 @@ install_release_commands() {
   local release_dir="$1"
   local reset_source="$release_dir/deploy/wfilemanager-reset-admin-password"
   local uninstall_source="$release_dir/deploy/uninstall.sh"
-  if [[ -f "$reset_source" ]]; then
-    install -m 700 "$reset_source" "$ROOT_RESET_COMMAND"
-  fi
-  if [[ -f "$uninstall_source" ]]; then
-    install -m 700 "$uninstall_source" "$UNINSTALL_COMMAND"
-  fi
+  [[ -f "$reset_source" ]] && install -m 700 "$reset_source" "$ROOT_RESET_COMMAND"
+  [[ -f "$uninstall_source" ]] && install -m 700 "$uninstall_source" "$UNINSTALL_COMMAND"
 }
 
 build_release() {
@@ -103,10 +101,28 @@ build_release() {
   command -v bun >/dev/null 2>&1 || fail "Bun is not installed"
   state installing 62 "Installing dependencies" "$TARGET_VERSION"
   bun install --frozen-lockfile
-  state building 78 "Building wFileManager" "$TARGET_VERSION"
+  state building 74 "Testing wFileManager" "$TARGET_VERSION"
+  bun run test
+  state building 82 "Building wFileManager" "$TARGET_VERSION"
   bun run build
   bun run typecheck
   [[ -f .output/server/index.mjs ]] || fail "The production server was not generated"
+}
+
+verify_release_archive() {
+  local archive="$1"
+  python3 - "$archive" <<'PY'
+import pathlib, sys, tarfile
+archive_path = sys.argv[1]
+with tarfile.open(archive_path, "r:gz") as archive:
+    for member in archive.getmembers():
+        name = member.name.replace("\\", "/")
+        pure = pathlib.PurePosixPath(name)
+        if pure.is_absolute() or ".." in pure.parts:
+            raise SystemExit("The release archive contains an unsafe path")
+        if member.issym() or member.islnk() or member.isdev() or member.isfifo():
+            raise SystemExit("The release archive contains an unsupported special entry")
+PY
 }
 
 install_release() {
@@ -145,14 +161,12 @@ install_release() {
   archive="$tmp/wfilemanager-$TARGET_VERSION.tar.gz"
   state downloading 18 "Downloading wFileManager $TARGET_VERSION" "$TARGET_VERSION"
   curl -fL --retry 3 --connect-timeout 15 --max-time 1800 "$release_url" -o "$archive" || fail "Release download failed"
-  state verifying 42 "Verifying SHA-256 checksum" "$TARGET_VERSION"
+  state verifying 42 "Verifying release integrity" "$TARGET_VERSION"
   actual="$(sha256sum "$archive" | awk '{print $1}')"
   actual_size="$(stat -c%s "$archive")"
   [[ "$actual" == "$expected" ]] || fail "Checksum mismatch: expected $expected, received $actual"
   [[ "$expected_size" =~ ^[0-9]+$ && "$expected_size" -gt 0 && "$actual_size" -eq "$expected_size" ]] || fail "Release size mismatch: expected $expected_size bytes, received $actual_size"
-  if tar -tzf "$archive" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
-    fail "The release archive contains an unsafe path"
-  fi
+  verify_release_archive "$archive" || fail "Release archive validation failed"
 
   release_dir="$RELEASES_DIR/$TARGET_VERSION"
   rm -rf "$release_dir"
@@ -160,7 +174,7 @@ install_release() {
   state extracting 52 "Extracting release files" "$TARGET_VERSION"
   extract_root="$tmp/extracted"
   mkdir -p "$extract_root"
-  tar -xzf "$archive" -C "$extract_root"
+  tar -xzf "$archive" -C "$extract_root" --no-same-owner --no-same-permissions
   local project_dir
   project_dir="$(find "$extract_root" -maxdepth 3 -type f -name package.json -printf '%h\n' | head -n1)"
   [[ -n "$project_dir" ]] || fail "package.json was not found in the release"
@@ -174,7 +188,7 @@ install_release() {
   install_release_commands "$release_dir"
   state restarting 92 "Restarting wFileManager" "$TARGET_VERSION"
   systemctl restart "$SERVICE" || true
-  state health-check 96 "Running local health check" "$TARGET_VERSION"
+  state health-check 96 "Running application, database and filesystem health checks" "$TARGET_VERSION"
   if ! health_check; then
     if [[ -n "$old_release" && -d "$old_release" ]]; then
       state rolling-back 97 "Health check failed; restoring the previous release" "$TARGET_VERSION"

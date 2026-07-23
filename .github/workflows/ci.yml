@@ -32,12 +32,17 @@ jobs:
         id: typecheck
         continue-on-error: true
         run: bun run typecheck >"$CI_LOG_DIR/typecheck.log" 2>&1
+      - name: Security tests
+        id: tests
+        continue-on-error: true
+        run: bun run test >"$CI_LOG_DIR/tests.log" 2>&1
       - name: Shell validation
         id: shell
         continue-on-error: true
         run: |
           {
             bash -n deploy/install.sh
+            bash -n deploy/update.sh
             bash -n deploy/uninstall.sh
             bash -n deploy/wfilemanager-reset-admin-password
           } >"$CI_LOG_DIR/shell.log" 2>&1
@@ -51,7 +56,9 @@ jobs:
         run: |
           cat "$CI_LOG_DIR/build.log" || true
           cat "$CI_LOG_DIR/typecheck.log" || true
+          cat "$CI_LOG_DIR/tests.log" || true
           cat "$CI_LOG_DIR/shell.log" || true
           [[ "${{ steps.build.outcome }}" == "success" ]]
           [[ "${{ steps.typecheck.outcome }}" == "success" ]]
+          [[ "${{ steps.tests.outcome }}" == "success" ]]
           [[ "${{ steps.shell.outcome }}" == "success" ]]

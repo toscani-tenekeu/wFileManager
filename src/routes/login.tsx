@@ -8,7 +8,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
-import { localApi } from "@/lib/local-api";
 import { wfilemanagerApi } from "@/lib/wfilemanager-api";
 
 export const Route = createFileRoute("/login")({
@@ -31,24 +30,16 @@ function LoginPage() {
   }, [auth.loading, auth.user, auth.configured, nav]);
 
   return (
-    <AuthShell
-      title="Sign in"
-      desc="Access your wFileManager administration panel."
-    >
+    <AuthShell title="Sign in" desc="Access your wFileManager administration panel.">
       {err && <Alert variant="destructive" className="mb-4"><AlertDescription>{err}</AlertDescription></Alert>}
       <form
         className="space-y-4"
-        onSubmit={async (e) => {
-          e.preventDefault();
+        onSubmit={async (event) => {
+          event.preventDefault();
           setErr(null);
           setSubmitting(true);
           try {
             await auth.login(user, pass, remember);
-            try {
-              await localApi.provisionSelf(pass);
-            } catch (provisionError) {
-              toast.warning(provisionError instanceof Error ? `Signed in, but Linux account setup failed: ${provisionError.message}` : "Signed in, but Linux account setup failed");
-            }
             await wfilemanagerApi.createNotification({
               title: "Signed in",
               message: `A new wFileManager session was started for ${user}.`,
@@ -67,14 +58,14 @@ function LoginPage() {
       >
         <div className="grid gap-1.5">
           <Label htmlFor="user">Username or email</Label>
-          <Input id="user" autoFocus value={user} onChange={(e) => setUser(e.target.value)} />
+          <Input id="user" autoFocus value={user} onChange={(event) => setUser(event.target.value)} />
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="pass">Password</Label>
-          <Input id="pass" type="password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="••••••••" />
+          <Input id="pass" type="password" value={pass} onChange={(event) => setPass(event.target.value)} placeholder="••••••••" />
         </div>
         <label className="flex items-center gap-2 text-sm">
-          <Checkbox checked={remember} onCheckedChange={(v) => setRemember(!!v)} />
+          <Checkbox checked={remember} onCheckedChange={(value) => setRemember(!!value)} />
           <span>Keep me signed in on this device</span>
         </label>
         <Button type="submit" className="w-full" disabled={submitting || !user || !pass}>
