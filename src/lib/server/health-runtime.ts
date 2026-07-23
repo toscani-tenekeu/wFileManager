@@ -1,6 +1,5 @@
 import crypto from "node:crypto";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 
 const DATABASE_MODE = process.env.WFILEMANAGER_DATABASE_MODE === "sqlite" ? "sqlite" : "supabase";
@@ -26,7 +25,8 @@ async function timed(name: string, operation: () => Promise<string>): Promise<He
 
 async function databaseCheck() {
   if (DATABASE_MODE !== "sqlite") return "Managed authentication backend configured";
-  const database = new DatabaseSync(DB_PATH, { readOnly: true });
+  const sqlite = await import("node:sqlite");
+  const database = new sqlite.DatabaseSync(DB_PATH, { readOnly: true });
   try {
     database.prepare("SELECT 1 AS healthy").get();
     database.prepare("SELECT value FROM wfm_meta WHERE key = 'configured'").get();
