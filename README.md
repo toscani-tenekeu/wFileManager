@@ -114,17 +114,23 @@ Reset an administrator password:
 sudo wfilemanager-reset-admin-password
 ```
 
-Update:
+The command asks for the new administrator password and its confirmation. Password input is intentionally invisible while typing: no characters, dots or asterisks are displayed.
+
+Update the wFileManager application:
 
 ```bash
 sudo systemctl start wfilemanager-updater@install.service
 ```
 
-Rollback:
+This updates the application to the latest stable release. The updater downloads and verifies the release, installs it, restarts wFileManager and performs a health check.
+
+Rollback the wFileManager application:
 
 ```bash
 sudo systemctl start wfilemanager-updater@rollback.service
 ```
+
+This restores the previous application release and restarts wFileManager. Persistent configuration and application data are preserved.
 
 ## Uninstall and delete data
 
