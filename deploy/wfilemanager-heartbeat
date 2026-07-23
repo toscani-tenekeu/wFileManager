@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ENV_FILE="${WFILEMANAGER_ENV_FILE:-/etc/wfilemanager/wfilemanager.env}"
+RECOVERY_KEY_FILE="${WFILEMANAGER_RECOVERY_KEY_FILE:-/etc/wfilemanager/root-reset.key}"
+
+[[ -f "$ENV_FILE" ]] || exit 0
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+set +a
+
+[[ "${WFILEMANAGER_DATABASE_MODE:-}" == "supabase" ]] || exit 0
+[[ -s "$RECOVERY_KEY_FILE" ]] || { echo "wFileManager recovery key is missing" >&2; exit 1; }
+
+INSTANCE_KEY="${WFILEMANAGER_INSTANCE_KEY:-}"
+SUPABASE_URL="${WFILEMANAGER_SUPABASE_URL:-${VITE_SUPABASE_URL:-}}"
+LIFECYCLE_URL="${WFILEMANAGER_LIFECYCLE_API_URL:-${SUPABASE_URL%/}/functions/v1/wfilemanager-instance-lifecycle-api}"
+RECOVERY_KEY="$(tr -d '\r\n' <"$RECOVERY_KEY_FILE")"
+HOSTNAME_VALUE="$(hostname -f 2>/dev/null || hostname)"
+BASE_URL="${WFILEMANAGER_PUBLIC_BASE_URL:-}"
+
+[[ -n "$INSTANCE_KEY" && "$LIFECYCLE_URL" == https://* ]] || {
+  echo "wFileManager lifecycle configuration is incomplete" >&2
+  exit 1
+}
+
+BODY="$(jq -cn --arg hostname "$HOSTNAME_VALUE" --arg baseUrl "$BASE_URL" '{hostname:$hostname,baseUrl:$baseUrl}')"
+RESPONSE_FILE="$(mktemp)"
+trap 'rm -f "$RESPONSE_FILE"' EXIT
+
+HTTP_STATUS="$(curl -sS --connect-timeout 10 --max-time 45 \
+  -o "$RESPONSE_FILE" -w '%{http_code}' \
+  -X POST "${LIFECYCLE_URL%/}/heartbeat" \
+  -H 'Content-Type: application/json' \
+  -H "x-wfilemanager-instance: $INSTANCE_KEY" \
+  -H "x-wfilemanager-recovery-key: $RECOVERY_KEY" \
+  --data "$BODY" || true)"
+
+if [[ "$HTTP_STATUS" != "200" ]]; then
+  MESSAGE="$(jq -r '.error // empty' "$RESPONSE_FILE" 2>/dev/null || true)"
+  echo "wFileManager heartbeat failed (HTTP ${HTTP_STATUS:-unknown}${MESSAGE:+: $MESSAGE})" >&2
+  exit 1
+fi
+
+jq -e '.success == true and .status == "active"' "$RESPONSE_FILE" >/dev/null

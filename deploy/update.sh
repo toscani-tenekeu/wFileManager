@@ -17,8 +17,12 @@ HEALTH_URL="${WFILEMANAGER_HEALTH_URL:-http://127.0.0.1:${PORT:-1973}/api/health
 KEEP_RELEASES="${WFILEMANAGER_KEEP_RELEASES:-3}"
 ROOT_RESET_COMMAND="${WFILEMANAGER_ROOT_RESET_COMMAND:-/usr/local/sbin/wfilemanager-reset-admin-password}"
 UNINSTALL_COMMAND="${WFILEMANAGER_UNINSTALL_COMMAND:-/usr/local/sbin/wfilemanager-uninstall}"
+RECOVERY_KIT_COMMAND="${WFILEMANAGER_RECOVERY_KIT_COMMAND:-/usr/local/sbin/wfilemanager-recovery-kit}"
+HEARTBEAT_COMMAND="${WFILEMANAGER_HEARTBEAT_COMMAND:-/usr/local/lib/wfilemanager/heartbeat.sh}"
+HEARTBEAT_SERVICE="wfilemanager-heartbeat.service"
+HEARTBEAT_TIMER="wfilemanager-heartbeat.timer"
 
-mkdir -p "$RELEASES_DIR" "$STATE_DIR" "$CONFIG_DIR"
+mkdir -p "$RELEASES_DIR" "$STATE_DIR" "$CONFIG_DIR" /usr/local/lib/wfilemanager
 chmod 700 "$STATE_DIR"
 exec 9>"$LOCK_FILE"
 flock -n 9 || { echo "Another wFileManager update is already running" >&2; exit 75; }
@@ -89,8 +93,39 @@ install_release_commands() {
   local release_dir="$1"
   local reset_source="$release_dir/deploy/wfilemanager-reset-admin-password"
   local uninstall_source="$release_dir/deploy/uninstall.sh"
+  local recovery_source="$release_dir/deploy/wfilemanager-recovery-kit"
+  local heartbeat_source="$release_dir/deploy/wfilemanager-heartbeat"
+  local heartbeat_service_source="$release_dir/deploy/wfilemanager-heartbeat.service"
+  local heartbeat_timer_source="$release_dir/deploy/wfilemanager-heartbeat.timer"
+  local database_mode=""
+
   [[ -f "$reset_source" ]] && install -m 700 "$reset_source" "$ROOT_RESET_COMMAND"
   [[ -f "$uninstall_source" ]] && install -m 700 "$uninstall_source" "$UNINSTALL_COMMAND"
+  [[ -f "$recovery_source" ]] && install -m 700 "$recovery_source" "$RECOVERY_KIT_COMMAND"
+
+  if [[ -f "$heartbeat_source" && -f "$heartbeat_service_source" && -f "$heartbeat_timer_source" ]]; then
+    install -m 750 "$heartbeat_source" "$HEARTBEAT_COMMAND"
+    install -m 644 "$heartbeat_service_source" "/etc/systemd/system/$HEARTBEAT_SERVICE"
+    install -m 644 "$heartbeat_timer_source" "/etc/systemd/system/$HEARTBEAT_TIMER"
+    systemctl daemon-reload || true
+
+    if [[ -f "$ENV_FILE" ]]; then
+      database_mode="$(sed -n 's/^WFILEMANAGER_DATABASE_MODE=//p' "$ENV_FILE" | tail -n1)"
+    fi
+    if [[ "$database_mode" == "supabase" ]]; then
+      systemctl enable --now "$HEARTBEAT_TIMER" || true
+      systemctl start "$HEARTBEAT_SERVICE" || true
+      if [[ -x "$RECOVERY_KIT_COMMAND" && ! -s /root/wfilemanager-recovery-kit.txt ]]; then
+        "$RECOVERY_KIT_COMMAND" export /root/wfilemanager-recovery-kit.txt >/dev/null || true
+      fi
+    else
+      systemctl disable --now "$HEARTBEAT_TIMER" 2>/dev/null || true
+    fi
+  else
+    systemctl disable --now "$HEARTBEAT_TIMER" 2>/dev/null || true
+    rm -f "$HEARTBEAT_COMMAND" "/etc/systemd/system/$HEARTBEAT_SERVICE" "/etc/systemd/system/$HEARTBEAT_TIMER"
+    systemctl daemon-reload || true
+  fi
 }
 
 build_release() {

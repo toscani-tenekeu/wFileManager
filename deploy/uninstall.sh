@@ -10,7 +10,8 @@ DATABASE_MODE="unknown"
 DOMAIN=""
 INSTANCE_KEY=""
 SUPABASE_URL=""
-ROOT_TOKEN=""
+LIFECYCLE_API_URL=""
+RECOVERY_KEY=""
 PACKAGES=()
 
 if [[ -f "$ENV_FILE" ]]; then
@@ -22,9 +23,10 @@ if [[ -f "$ENV_FILE" ]]; then
   DOMAIN="${WFILEMANAGER_DOMAIN:-}"
   INSTANCE_KEY="${WFILEMANAGER_INSTANCE_KEY:-}"
   SUPABASE_URL="${WFILEMANAGER_SUPABASE_URL:-${VITE_SUPABASE_URL:-}}"
+  LIFECYCLE_API_URL="${WFILEMANAGER_LIFECYCLE_API_URL:-${SUPABASE_URL%/}/functions/v1/wfilemanager-instance-lifecycle-api}"
 fi
 if [[ -f /etc/wfilemanager/root-reset.key ]]; then
-  ROOT_TOKEN="$(tr -d '\r\n' </etc/wfilemanager/root-reset.key)"
+  RECOVERY_KEY="$(tr -d '\r\n' </etc/wfilemanager/root-reset.key)"
 fi
 if [[ -f "$STATE_FILE" ]]; then
   set -a
@@ -59,23 +61,35 @@ esac
 read -r -p "Type REMOVE to permanently delete wFileManager and its data: " CONFIRM </dev/tty
 [[ "$CONFIRM" == "REMOVE" ]] || { echo "Cancelled."; exit 0; }
 
-if [[ "$DATABASE_MODE" == "supabase" && -n "$SUPABASE_URL" && -n "$INSTANCE_KEY" && -n "$ROOT_TOKEN" ]]; then
+if [[ "$DATABASE_MODE" == "supabase" && -n "$LIFECYCLE_API_URL" && -n "$INSTANCE_KEY" && -n "$RECOVERY_KEY" ]]; then
   echo "Deleting managed Supabase data for this installation..."
-  HTTP_STATUS="$(curl -sS --connect-timeout 10 --max-time 60 -o /tmp/wfilemanager-uninstall-response.json -w '%{http_code}' \
-    -X POST "${SUPABASE_URL%/}/functions/v1/wfilemanager-uninstall-api" \
+  RESPONSE_FILE="$(mktemp)"
+  HTTP_STATUS="$(curl -sS --connect-timeout 10 --max-time 60 -o "$RESPONSE_FILE" -w '%{http_code}' \
+    -X POST "${LIFECYCLE_API_URL%/}/delete" \
     -H 'Content-Type: application/json' \
     -H "x-wfilemanager-instance: $INSTANCE_KEY" \
-    -H "x-wfilemanager-root-token: $ROOT_TOKEN" || true)"
-  if [[ "$HTTP_STATUS" != "200" && "$HTTP_STATUS" != "404" ]]; then
-    echo "Warning: remote data deletion returned HTTP ${HTTP_STATUS:-unknown}. Local removal will continue." >&2
+    -H "x-wfilemanager-recovery-key: $RECOVERY_KEY" \
+    --data '{}' || true)"
+  if [[ "$HTTP_STATUS" != "200" ]]; then
+    MESSAGE="$(jq -r '.error // empty' "$RESPONSE_FILE" 2>/dev/null || true)"
+    echo "Warning: remote data deletion returned HTTP ${HTTP_STATUS:-unknown}${MESSAGE:+: $MESSAGE}. Local removal will continue." >&2
   fi
-  rm -f /tmp/wfilemanager-uninstall-response.json
+  rm -f "$RESPONSE_FILE"
+elif [[ "$DATABASE_MODE" == "supabase" ]]; then
+  echo "Warning: the Recovery Kit credentials are incomplete, so managed Supabase data could not be deleted." >&2
+  echo "Use the official installer with the saved Recovery Kit and choose remote deletion." >&2
 fi
 
+systemctl disable --now wfilemanager-heartbeat.timer 2>/dev/null || true
+systemctl stop wfilemanager-heartbeat.service 2>/dev/null || true
 systemctl disable --now wfilemanager.service 2>/dev/null || true
 systemctl disable --now wfilemanager-updater@install.service 2>/dev/null || true
 systemctl disable --now wfilemanager-updater@rollback.service 2>/dev/null || true
-rm -f /etc/systemd/system/wfilemanager.service /etc/systemd/system/wfilemanager-updater@.service
+rm -f \
+  /etc/systemd/system/wfilemanager.service \
+  /etc/systemd/system/wfilemanager-updater@.service \
+  /etc/systemd/system/wfilemanager-heartbeat.service \
+  /etc/systemd/system/wfilemanager-heartbeat.timer
 systemctl daemon-reload
 systemctl reset-failed 2>/dev/null || true
 
@@ -88,7 +102,11 @@ if [[ -n "$DOMAIN" ]] && command -v certbot >/dev/null 2>&1; then
 fi
 
 rm -rf /opt/wfilemanager /etc/wfilemanager /var/lib/wfilemanager /usr/local/lib/wfilemanager
-rm -f /usr/local/sbin/wfilemanager-reset-admin-password /usr/local/sbin/wfilemanager-uninstall
+rm -f \
+  /usr/local/sbin/wfilemanager-reset-admin-password \
+  /usr/local/sbin/wfilemanager-uninstall \
+  /usr/local/sbin/wfilemanager-recovery-kit \
+  /root/wfilemanager-recovery-kit.txt
 
 if [[ "$REMOVE_PACKAGES" == "true" ]]; then
   if ((${#PACKAGES[@]} > 0)); then

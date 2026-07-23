@@ -11,6 +11,8 @@ const PRESENCE_API_URL = `${PROJECT_URL}/functions/v1/wfilemanager-presence-api`
 const INSTANCE_KEY = import.meta.env.VITE_WFILEMANAGER_INSTANCE_KEY || "kmerhosting-main";
 const TOKEN_KEY = "wfilemanager_session_token";
 
+export type InstanceLifecycleStatus = "active" | "frozen" | "disabled";
+
 export interface AuthUser {
   id: string;
   instanceId: string;
@@ -70,6 +72,21 @@ export interface SetupPayload {
   username: string;
   email?: string;
   password: string;
+}
+
+export interface InstanceStatusResponse {
+  configured: boolean;
+  instanceKey?: string;
+  status?: InstanceLifecycleStatus;
+  frozenAt?: string | null;
+  deleteAfterAt?: string | null;
+  instance?: {
+    id: string;
+    name: string;
+    hostname?: string;
+    databaseMode?: string;
+    status?: InstanceLifecycleStatus;
+  };
 }
 
 function token() {
@@ -132,10 +149,10 @@ export const wfilemanagerApi = {
   getToken: token,
   setToken: (value: string) => localStorage.setItem(TOKEN_KEY, value),
   clearToken: () => localStorage.removeItem(TOKEN_KEY),
-  status: () => request<{ configured: boolean; instance?: { id: string; name: string; hostname?: string; databaseMode?: string } }>("status"),
+  status: () => request<InstanceStatusResponse>("status"),
   setup: (data: SetupPayload) => request<{ success: true; user: AuthUser }>("setup", { method: "POST", body: JSON.stringify(data) }),
   login: (login: string, password: string, remember: boolean) => request<{ token: string; expiresAt: string; user: AuthUser }>("login", { method: "POST", body: JSON.stringify({ login, password, remember }) }),
-  me: () => request<{ user: AuthUser; instance: { id: string; name: string; hostname?: string; databaseMode?: string } }>("me"),
+  me: () => request<{ user: AuthUser; instance: { id: string; name: string; hostname?: string; databaseMode?: string; status?: InstanceLifecycleStatus } }>("me"),
   logout: () => request<{ success: true }>("logout", { method: "POST" }),
   users: () => request<{ users: AuthUser[] }>("users"),
   createUser: (data: { displayName: string; username: string; email?: string; password: string; roleId?: string; status?: string; mustChangePassword?: boolean }) =>

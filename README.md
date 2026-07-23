@@ -27,11 +27,17 @@ Create the DNS A record first, wait for propagation, then run:
 curl -fsSL https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/install.sh | sudo bash
 ```
 
-The installer asks for the domain and database mode.
+The installer asks for the database mode and domain.
 
 ### Database modes
 
-**KmerHosting managed Supabase** is the fastest option for evaluation and testing. Accounts, roles, sessions and notifications are kept in the managed project. Each server is limited to 100 MB of application data.
+**KmerHosting managed Supabase** is the fastest option for evaluation and testing. Accounts, roles, sessions, notifications and related application settings are kept in the managed project. Each server is limited to 100 MB of application data.
+
+For a new managed Supabase installation, the installer can:
+
+1. create a new installation;
+2. recover an existing installation with its Recovery Kit;
+3. permanently delete an existing remote installation.
 
 **SQLite on this VPS** is recommended for long-term installations. It keeps application records locally in:
 
@@ -39,15 +45,53 @@ The installer asks for the domain and database mode.
 /var/lib/wfilemanager/wfilemanager.db
 ```
 
-Files managed in File Explorer always remain on the VPS. The selected database affects only application accounts, roles, sessions, notifications and related records.
+Files managed in File Explorer always remain on the VPS. The selected database affects only application accounts, roles, sessions, notifications and related records. Supabase does not back up or restore the files stored on the Linux server.
 
-After installation, open:
+After a new installation, open:
 
 ```text
 https://your-domain.example/setup
 ```
 
+After recovering an existing Supabase installation, open `/login` and use the administrator credentials that were already stored in that installation.
+
 Administrator passwords require at least 12 alphanumeric characters with uppercase, lowercase and a number. Identical consecutive characters are rejected.
+
+## Managed Supabase Recovery Kit
+
+A managed Supabase installation creates a root-only Recovery Kit at:
+
+```text
+/root/wfilemanager-recovery-kit.txt
+```
+
+Copy this file outside the VPS. It contains:
+
+- the installation instance key;
+- the recovery key;
+- the configured domain.
+
+Display or export the current kit:
+
+```bash
+sudo wfilemanager-recovery-kit show
+sudo wfilemanager-recovery-kit export /root/wfilemanager-recovery-kit.txt
+```
+
+The Recovery Kit is required to reconnect a replacement VPS or permanently delete the managed Supabase records after the original server is lost or reinstalled. A successful recovery rotates the recovery key, revokes every previous application session and invalidates old copies of the kit.
+
+### Inactivity lifecycle
+
+Inactivity is based on the server heartbeat, not on how often a person opens the web interface. A running installation sends a signed heartbeat every 12 hours.
+
+- Before 30 days without a valid heartbeat, the installation remains active.
+- At 30 days without a valid heartbeat, the managed instance is frozen. Its data remains stored, active sessions are revoked and normal login is blocked.
+- A valid heartbeat from the original installation can reactivate a frozen instance.
+- A replacement server can reactivate it with the Recovery Kit. Recovery rotates the key and revokes old sessions.
+- At 90 days without a valid heartbeat or recovery, all managed Supabase records for the instance are permanently deleted.
+- No inactivity warning email or notification is sent.
+
+The 90-day period is counted from the last valid activity, not from the date of the freeze.
 
 ## Main features
 
@@ -85,6 +129,13 @@ Application health:
 curl -fsS http://127.0.0.1:1973/api/health
 ```
 
+Managed Supabase heartbeat status:
+
+```bash
+sudo systemctl status wfilemanager-heartbeat.timer --no-pager
+sudo systemctl start wfilemanager-heartbeat.service
+```
+
 Reset an administrator password:
 
 ```bash
@@ -113,7 +164,8 @@ The update system verifies the archive, runs tests, builds a separate release, s
 /opt/wfilemanager/                    Application releases
 /etc/wfilemanager/                    Configuration and recovery key
 /var/lib/wfilemanager/                SQLite, trash and update state
-/usr/local/lib/wfilemanager/          Updater
+/root/wfilemanager-recovery-kit.txt   Managed Supabase recovery kit
+/usr/local/lib/wfilemanager/          Updater and heartbeat helper
 /usr/local/sbin/wfilemanager-*        Administration commands
 /etc/nginx/sites-available/wfilemanager
 ```
@@ -131,7 +183,8 @@ The update system verifies the archive, runs tests, builds a separate release, s
 - Uploads never replace an existing destination.
 - Archive entry count, expanded size, compression ratio and destination free space are checked.
 - Release archives are verified by size and SHA-256 before activation.
-- The root recovery key is stored with mode `0600`.
+- The recovery key and exported Recovery Kit are stored with mode `0600`.
+- Managed Supabase recovery authenticates with a hashed per-instance secret; the raw recovery key is not stored in Supabase.
 
 Read [SECURITY.md](./SECURITY.md) before reporting a vulnerability.
 
