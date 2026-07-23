@@ -8,7 +8,6 @@ import {
   TerminalSquare,
   Users,
   ShieldCheck,
-  HardDrive,
   UserCircle2,
   BookOpen,
   Info,
@@ -28,6 +27,7 @@ type Item = {
   icon: React.ComponentType<{ className?: string }>;
   permission?: string;
   anyPermission?: string[];
+  adminOnly?: boolean;
   newTab?: boolean;
 };
 
@@ -42,15 +42,9 @@ const NAV: { label: string; items: Item[] }[] = [
     ],
   },
   {
-    label: "System",
-    items: [
-      { to: "/terminal", label: "Terminal", icon: TerminalSquare, permission: "use_terminal" },
-      { to: "/storage", label: "Storage", icon: HardDrive },
-    ],
-  },
-  {
     label: "Administration",
     items: [
+      { to: "/terminal", label: "Terminal", icon: TerminalSquare, adminOnly: true },
       { to: "/users", label: "Users", icon: Users, permission: "manage_users" },
       { to: "/roles", label: "Roles & permissions", icon: ShieldCheck, permission: "manage_roles" },
     ],
@@ -79,6 +73,7 @@ export function AppSidebar({ className }: { className?: string }) {
   const [version, setVersion] = useState(SERVER_INFO.wfmVersion);
   const isActive = (to?: string) => Boolean(to && (to === "/" ? pathname === "/" : pathname === to || pathname.startsWith(`${to}/`)));
   const canSee = (item: Item) => {
+    if (item.adminOnly) return Boolean(user?.isAdmin);
     if (!item.permission && !item.anyPermission) return true;
     if (user?.isAdmin) return true;
     const permissions = user?.permissions || [];
@@ -101,7 +96,7 @@ export function AppSidebar({ className }: { className?: string }) {
   return (
     <aside className={cn("flex h-full w-full shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:w-60", className)}>
       <div className="flex h-14 items-center gap-2 border-b border-sidebar-border px-4">
-<div className="flex flex-col leading-tight">
+        <div className="flex flex-col leading-tight">
           <span className="text-sm font-semibold tracking-tight">wFileManager</span>
           <span className="text-[10px] tracking-wide text-muted-foreground">From KmerHosting LLC</span>
         </div>
