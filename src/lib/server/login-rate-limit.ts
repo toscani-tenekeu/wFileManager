@@ -1,11 +1,13 @@
-import { SqliteAuthError } from "@/lib/server/sqlite-store";
-
 type Attempt = {
   failures: number;
   windowStartedAt: number;
   blockedUntil: number;
   lastSeenAt: number;
 };
+
+export class LoginRateLimitError extends Error {
+  status = 429;
+}
 
 type Runtime = typeof globalThis & { __wfmLoginAttempts?: Map<string, Attempt> };
 const runtime = globalThis as Runtime;
@@ -35,14 +37,14 @@ function current(request: Request, loginInput: unknown) {
     attempts.set(id, value);
   }
   value.lastSeenAt = now;
-  return { id, value, now };
+  return { value, now };
 }
 
 export function assertLoginAllowed(request: Request, loginInput: unknown) {
   const { value, now } = current(request, loginInput);
   if (value.blockedUntil > now) {
     const seconds = Math.max(1, Math.ceil((value.blockedUntil - now) / 1000));
-    throw new SqliteAuthError(429, `Too many failed sign-in attempts. Try again in ${seconds} seconds.`);
+    throw new LoginRateLimitError(`Too many failed sign-in attempts. Try again in ${seconds} seconds.`);
   }
 }
 
