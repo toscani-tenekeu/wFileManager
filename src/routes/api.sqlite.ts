@@ -45,6 +45,9 @@ async function body(request: Request) {
 
 function errorResponse(error: unknown) {
   if (error instanceof SqliteAuthError) return json({ error: error.message }, error.status);
+  if (error instanceof Error && "status" in error && Number.isInteger((error as { status?: number }).status)) {
+    return json({ error: error.message }, Number((error as { status: number }).status));
+  }
   console.error(error);
   return json({ error: error instanceof Error ? error.message : "SQLite backend request failed." }, 500);
 }
