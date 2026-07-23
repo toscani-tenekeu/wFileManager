@@ -33,7 +33,7 @@ export const DEMO_USERS: DemoUser[] = [
     email: "dana@kmerhosting.com",
     role: "File Manager",
     status: "active",
-    lastActive: new Date(Date.now() - 3600_000).toISOString(),
+    lastActive: new Date(Date.now() - 3_600_000).toISOString(),
     timezone: "Europe/Paris",
     language: "en",
     twoFactor: true,
@@ -45,7 +45,7 @@ export const DEMO_USERS: DemoUser[] = [
     email: "ada@kmerhosting.com",
     role: "Auditor",
     status: "active",
-    lastActive: new Date(Date.now() - 86400_000).toISOString(),
+    lastActive: new Date(Date.now() - 86_400_000).toISOString(),
     timezone: "UTC",
     language: "en",
     twoFactor: false,
@@ -57,7 +57,7 @@ export const DEMO_USERS: DemoUser[] = [
     email: "chris@kmerhosting.com",
     role: "Content Manager",
     status: "active",
-    lastActive: new Date(Date.now() - 2 * 86400_000).toISOString(),
+    lastActive: new Date(Date.now() - 2 * 86_400_000).toISOString(),
     timezone: "America/New_York",
     language: "en",
     twoFactor: false,
@@ -81,7 +81,7 @@ export const DEMO_USERS: DemoUser[] = [
     email: "diego@kmerhosting.com",
     role: "Uploader",
     status: "disabled",
-    lastActive: new Date(Date.now() - 20 * 86400_000).toISOString(),
+    lastActive: new Date(Date.now() - 20 * 86_400_000).toISOString(),
     timezone: "America/Mexico_City",
     language: "es",
     twoFactor: false,
@@ -120,7 +120,6 @@ export const PERMISSION_KEYS = [
   "change_group",
   "create_symlinks",
   "calculate_checksums",
-  "use_terminal",
   "manage_users",
   "manage_roles",
 ] as const;
@@ -131,7 +130,7 @@ export const DEMO_ROLES: DemoRole[] = [
   {
     id: "r_admin",
     name: "Administrator",
-    description: "Full access to the filesystem, users and terminal.",
+    description: "Full application access, including the administrator terminal.",
     builtin: true,
     members: 1,
     permissions: [...PERMISSION_KEYS],
@@ -139,17 +138,15 @@ export const DEMO_ROLES: DemoRole[] = [
   {
     id: "r_filemanager",
     name: "File Manager",
-    description: "Manage files across most paths; no user or role management.",
+    description: "Manage files across permitted paths without user or role administration.",
     builtin: true,
     members: 1,
-    permissions: PERMISSION_KEYS.filter(
-      (p) => !["manage_users", "manage_roles"].includes(p),
-    ),
+    permissions: PERMISSION_KEYS.filter((permission) => !["manage_users", "manage_roles"].includes(permission)),
   },
   {
     id: "r_editor",
     name: "Editor",
-    description: "Read and edit files. No delete or terminal.",
+    description: "Read and edit files without delete or administration access.",
     builtin: true,
     members: 0,
     permissions: ["browse", "view", "preview", "read", "edit", "rename", "download"],
@@ -178,32 +175,16 @@ export const DEMO_ROLES: DemoRole[] = [
     members: 1,
     permissions: ["browse", "view", "preview", "read"],
   },
-  {
-    id: "r_terminal",
-    name: "Terminal Operator",
-    description: "Terminal access for a bounded set of paths.",
-    builtin: true,
-    members: 0,
-    permissions: ["browse", "view", "use_terminal"],
-  },
 ];
 
-// ---------- Activity log ----------
-
 export type ActivityResult = "success" | "failure" | "warning";
+
 export interface ActivityEvent {
   id: string;
   time: string;
   user: string;
   action: string;
-  category:
-    | "auth"
-    | "file"
-    | "user"
-    | "permission"
-    | "terminal"
-    | "settings"
-    | "archive";
+  category: "auth" | "file" | "user" | "permission" | "terminal" | "settings" | "archive";
   target?: string;
   result: ActivityResult;
   ip?: string;
@@ -219,85 +200,17 @@ const actions: Array<Omit<ActivityEvent, "id" | "time">> = [
   { user: "admin", action: "Changed permissions", category: "permission", target: "/var/www/example.com", result: "success" },
   { user: "dana", action: "Extracted archive", category: "archive", target: "/tmp/release-1.4.2.tar.gz", result: "success" },
   { user: "admin", action: "Created user", category: "user", target: "priya", result: "success" },
-  { user: "dana", action: "Opened terminal", category: "terminal", target: "/home/admin/Projects/api", result: "success" },
+  { user: "admin", action: "Opened administrator terminal", category: "terminal", target: "/root", result: "success" },
   { user: "chris", action: "Moved to trash", category: "file", target: "/var/www/example.com/uploads/old-banner.png", result: "success" },
   { user: "admin", action: "Emptied trash", category: "file", result: "warning" },
 ];
 
-export const DEMO_ACTIVITY: ActivityEvent[] = actions.map((a, i) => ({
-  ...a,
-  id: `evt_${i + 1}`,
-  time: new Date(Date.now() - i * 1_800_000).toISOString(),
+export const DEMO_ACTIVITY: ActivityEvent[] = actions.map((activity, index) => ({
+  ...activity,
+  id: `evt_${index + 1}`,
+  time: new Date(Date.now() - index * 1_800_000).toISOString(),
   duration: Math.round(Math.random() * 400),
 }));
-
-// ---------- Storage ----------
-
-export interface Mount {
-  device: string;
-  mountpoint: string;
-  fstype: string;
-  total: number;
-  used: number;
-  inodesTotal: number;
-  inodesUsed: number;
-  options: string;
-  readonly: boolean;
-  health: "ok" | "warning" | "critical";
-}
-
-export const DEMO_MOUNTS: Mount[] = [
-  {
-    device: "/dev/nvme0n1p2",
-    mountpoint: "/",
-    fstype: "ext4",
-    total: 512 * 1024 ** 3,
-    used: 218 * 1024 ** 3,
-    inodesTotal: 33_554_432,
-    inodesUsed: 1_842_991,
-    options: "rw,relatime,errors=remount-ro",
-    readonly: false,
-    health: "ok",
-  },
-  {
-    device: "/dev/nvme0n1p1",
-    mountpoint: "/boot/efi",
-    fstype: "vfat",
-    total: 512 * 1024 ** 2,
-    used: 12 * 1024 ** 2,
-    inodesTotal: 0,
-    inodesUsed: 0,
-    options: "rw,relatime,fmask=0022",
-    readonly: false,
-    health: "ok",
-  },
-  {
-    device: "/dev/sdb1",
-    mountpoint: "/mnt/backups",
-    fstype: "ext4",
-    total: 2 * 1024 ** 4,
-    used: 1.7 * 1024 ** 4,
-    inodesTotal: 130_000_000,
-    inodesUsed: 21_400_000,
-    options: "rw,relatime",
-    readonly: false,
-    health: "warning",
-  },
-  {
-    device: "tmpfs",
-    mountpoint: "/run",
-    fstype: "tmpfs",
-    total: 1 * 1024 ** 3,
-    used: 42 * 1024 ** 2,
-    inodesTotal: 1_000_000,
-    inodesUsed: 812,
-    options: "rw,nosuid,nodev,size=1g",
-    readonly: false,
-    health: "ok",
-  },
-];
-
-// ---------- Server info ----------
 
 export const SERVER_INFO = {
   hostname: "app-prod-01",
@@ -305,7 +218,7 @@ export const SERVER_INFO = {
   version: "24.04 LTS (Noble Numbat)",
   kernel: "6.8.0-45-generic",
   architecture: "x86_64",
-  uptimeSeconds: 12 * 86400 + 4 * 3600 + 18 * 60,
-  wfmVersion: "0.6.12",
+  uptimeSeconds: 12 * 86_400 + 4 * 3_600 + 18 * 60,
+  wfmVersion: "0.7.3",
   connection: "demonstration" as const,
 };
