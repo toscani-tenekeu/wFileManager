@@ -14,7 +14,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { wfilemanagerApi, type AuthUser, type WFileManagerRole } from "@/lib/wfilemanager-api";
 import { formatRelative } from "@/lib/format";
 import { toast } from "sonner";
-import { localApi } from "@/lib/local-api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/lib/auth";
 
@@ -59,14 +58,14 @@ function Users() {
       <div className="mb-6 flex items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Users</h1>
-          <p className="text-sm text-muted-foreground">Create and remove application users and their dedicated Linux sudo accounts.</p>
+          <p className="text-sm text-muted-foreground">Manage wFileManager accounts and application permissions. User creation does not create a Linux or sudo account.</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="icon" onClick={() => void load()} aria-label="Refresh users"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /></Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild><Button><Plus className="mr-1.5 h-4 w-4" /> Create user</Button></DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>Create a user</DialogTitle><DialogDescription>Create a wFileManager account and a matching Linux sudo account.</DialogDescription></DialogHeader>
+              <DialogHeader><DialogTitle>Create a user</DialogTitle><DialogDescription>Create an application account and assign its wFileManager role.</DialogDescription></DialogHeader>
               <div className="grid gap-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="grid gap-1.5"><Label>Display name</Label><Input value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} /></div>
@@ -82,11 +81,6 @@ function Users() {
                 <Button onClick={async () => {
                   try {
                     const result = await wfilemanagerApi.createUser({ ...form, email: form.email || undefined });
-                    try {
-                      await localApi.provisionUser(result.user, form.password);
-                    } catch (provisionError) {
-                      toast.warning(provisionError instanceof Error ? `Application user created, but Linux account setup failed: ${provisionError.message}` : "Application user created, but Linux account setup failed");
-                    }
                     setUsers((current) => [result.user, ...current]);
                     setForm({ displayName: "", username: "", email: "", password: "", roleId: roles.find((role) => role.name === "Read Only")?.id || roles[0]?.id || "", mustChangePassword: true });
                     setOpen(false);
@@ -144,9 +138,7 @@ function Users() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {deleteTarget?.displayName}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This permanently removes the wFileManager account, active sessions, notifications, path rules and the dedicated Linux user <span className="font-mono">{deleteTarget?.username}</span>. Files owned by that Linux user are not deleted automatically.
-            </AlertDialogDescription>
+            <AlertDialogDescription>This permanently removes the wFileManager account, its active sessions, private notifications and role assignment. Server files are not deleted.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
@@ -159,11 +151,6 @@ function Users() {
                 setDeleting(true);
                 try {
                   await wfilemanagerApi.deleteUser(deleteTarget.id);
-                  try {
-                    await localApi.deprovisionUser(deleteTarget);
-                  } catch (linuxError) {
-                    toast.warning(linuxError instanceof Error ? `Application user deleted, but Linux account cleanup failed: ${linuxError.message}` : "Application user deleted, but Linux account cleanup failed");
-                  }
                   setUsers((current) => current.filter((user) => user.id !== deleteTarget.id));
                   toast.success(`Deleted ${deleteTarget.username}`);
                   setDeleteTarget(null);
