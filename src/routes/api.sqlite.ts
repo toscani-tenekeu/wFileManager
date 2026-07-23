@@ -28,6 +28,7 @@ import {
   updateRole,
   userResponse,
 } from "@/lib/server/sqlite-store";
+import { assertLoginAllowed, recordLoginFailure, recordLoginSuccess } from "@/lib/server/login-rate-limit";
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -87,7 +88,17 @@ export const Route = createFileRoute("/api/sqlite")({
           const payload = await body(request);
 
           if (scope === "auth" && action === "setup") return json(setup(payload), 201);
-          if (scope === "auth" && action === "login") return json(login(payload, request));
+          if (scope === "auth" && action === "login") {
+            assertLoginAllowed(request, payload.login);
+            try {
+              const result = login(payload, request);
+              recordLoginSuccess(request, payload.login);
+              return json(result);
+            } catch (error) {
+              if (error instanceof SqliteAuthError && error.status === 401) recordLoginFailure(request, payload.login);
+              throw error;
+            }
+          }
 
           const sessionToken = token(request);
           const user = sessionUser(sessionToken);
