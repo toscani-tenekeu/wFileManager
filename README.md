@@ -1,44 +1,55 @@
 # wFileManager
 
-**A modern and open source file manager for Linux servers.**
+**A privileged web file manager for Linux servers.**
 
-wFileManager provides a web file explorer, guarded archive handling, per-user trash, application users and roles, notifications, verified updates and an administrator-only Linux terminal.
+wFileManager provides browser-based filesystem management, guarded archive handling, per-user trash, application users and roles, notifications, verified updates, automatic rollback and an administrator-only root terminal.
 
-> wFileManager runs with elevated privileges. Install it only on a server you control and restrict administrator access to trusted people.
+> Treat wFileManager like a root administration panel. Install it only on a server you control. Keep administrator accounts restricted to trusted operators.
 
-## Requirements
+## Installation requirements
 
-- Ubuntu 20.04 LTS or newer; Ubuntu 24.04 LTS recommended
-- KVM virtual machine, bare-metal server, or LXC container with systemd and root access
-- `amd64` or `arm64`
-- A domain with an A record pointing to the server's public IPv4 address
-- Public ports `80` and `443`
+wFileManager is intentionally strict. A production installation must meet these requirements before the installer continues:
 
-Installation by IP address or plain HTTP is not supported. The installer verifies DNS and configures HTTPS with Certbot.
+- Ubuntu 20.04 LTS or newer; Ubuntu 24.04 LTS recommended.
+- KVM virtual machine, bare-metal server, or LXC container with systemd and root access.
+- `amd64` or `arm64` architecture.
+- A domain whose A record points to the public IPv4 address of the target server.
+- Public ports `80` and `443` open.
+- Working `systemd`, `nginx`, `certbot`, `curl`, `jq`, `tar`, `gzip`, `xz`, `unzip`, `openssl`, build tools and Bun runtime installed or installable by apt.
 
-## Install
+Installation by raw IP address or plain HTTP is not supported. The installer validates DNS, configures HTTPS and keeps the internal application port bound to localhost.
 
-Point your domain's A record to the public IPv4 address of the server where wFileManager will be installed. Wait until the domain resolves to that address, then run:
+## Official installation
+
+Point your domain's A record to the public IPv4 address of the server where wFileManager will be installed. Wait until the domain resolves to that address, then run the official installer as root:
 
 ```bash
 curl -fsSL https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/install.sh | sudo bash
 ```
 
-The installer asks for the domain and application-data mode. After installation, open:
+The installer asks for:
+
+1. the public domain;
+2. the application-data plan;
+3. Pro creation, recovery or deletion action when Pro managed data is selected.
+
+After installation, open:
 
 ```text
 https://your-domain.example/setup
 ```
 
-Administrator passwords require at least 12 alphanumeric characters with uppercase, lowercase and a number. Identical consecutive characters are rejected.
+The first administrator password must contain at least 12 alphanumeric characters, uppercase, lowercase and a number. Identical consecutive characters are rejected.
 
-## Application-data modes
+## Editions and data storage
 
-The selected mode controls wFileManager application records such as users, roles, sessions, authentication information, notifications and settings. It does not control or back up the files displayed by the file manager.
+The edition controls where wFileManager stores its own application records: users, roles, sessions, authentication records, notifications and settings. It does not back up the files displayed by the file manager.
 
 ### Community — SQLite on your server
 
-Community is free forever and does not require a paid licence or subscription. Application records are stored locally in:
+Community is free forever. It does not require a paid licence or subscription.
+
+Application records are stored locally in:
 
 ```text
 /var/lib/wfilemanager/wfilemanager.db
@@ -49,27 +60,33 @@ The server administrator is responsible for:
 - SQLite database backups;
 - restores and migrations;
 - database maintenance;
-- recovery after a server reinstall or replacement.
+- recovery after a server reinstall or replacement;
+- monitoring local disk availability and filesystem health.
 
-Community includes all wFileManager features and community support.
+Community includes all wFileManager application features. The difference is data responsibility, not feature access.
 
-### Pro — Managed application data
+### Pro — managed application data
 
 Pro costs **$50 USD per instance per year** and includes **100 MB** of managed application storage.
 
-Pro includes:
+Pro manages wFileManager application records separately from the server, including:
 
-- managed users, roles, sessions and authentication records;
-- managed notifications, settings and related application records;
-- automatic backups of wFileManager application data;
-- recovery of users and application records after a server reinstall or replacement;
-- priority support.
+- application users;
+- roles and permissions;
+- sessions and authentication records;
+- notifications;
+- settings and related internal records;
+- managed backups and recovery metadata.
 
 Each additional **100 MB** of managed application storage costs **$1 USD per year**.
 
-Pro storage covers wFileManager application records only. Files, directories, databases and other content on the server filesystem require a separate server backup and recovery strategy.
+Pro recovery covers wFileManager application records only. Files, directories, databases, uploads and other content on the server filesystem require an independent server backup and recovery strategy.
 
-See [Application-data modes](./docs/data-modes.md) for the complete comparison.
+For Pro activation or storage expansion, contact:
+
+```text
+support@kmerhosting.com
+```
 
 ## Pro Recovery Kit
 
@@ -88,21 +105,21 @@ sudo wfilemanager-recovery-kit show
 sudo wfilemanager-recovery-kit export /root/wfilemanager-recovery-kit.txt
 ```
 
-A successful recovery rotates the recovery key and revokes previous application sessions. Recovery applies only to managed wFileManager application records; it does not restore files from the server filesystem.
+A successful recovery rotates the recovery key, rotates heartbeat credentials and revokes previous application sessions. Recovery does not restore server filesystem files.
 
 ## Main features
 
-- Linux filesystem browsing from `/`
-- Multi-selection, copy, move, rename and delete operations
-- Uploads and downloads with progress
-- Text preview and editing
-- ZIP and TAR.GZ creation and guarded extraction
-- Protection against traversal, unsafe links, special archive entries and excessive expansion
-- Per-user trash, restore and permanent deletion
-- Application users, roles and permissions
-- Sessions, notifications and presence
-- Administrator-only root PTY terminal with current-password verification
-- Stable updates with checksum verification, health checks and rollback
+- Linux filesystem browsing from `/`.
+- Multi-selection, copy, move, rename and delete operations.
+- Uploads and downloads with progress.
+- Text preview and editing.
+- ZIP and TAR.GZ creation and guarded extraction.
+- Protection against traversal, unsafe links, special archive entries and excessive expansion.
+- Per-user trash, restore and permanent deletion.
+- Application users, roles and permissions.
+- Sessions, notifications and presence.
+- Administrator-only root PTY terminal with current-password verification.
+- Stable updates with checksum verification, health checks and rollback.
 
 Application users are not Linux users. Creating an account, signing in or changing an application password never creates an operating-system account and never grants sudo access.
 
@@ -126,7 +143,7 @@ Application health:
 curl -fsS http://127.0.0.1:1973/api/health
 ```
 
-Pro managed-data heartbeat status:
+Pro heartbeat status:
 
 ```bash
 sudo systemctl status wfilemanager-heartbeat.timer --no-pager
@@ -163,7 +180,7 @@ The update system verifies the release archive, builds a separate release, switc
 
 ```text
 /opt/wfilemanager/                    Application releases
-/etc/wfilemanager/                    Configuration and recovery key
+/etc/wfilemanager/                    Configuration and recovery keys
 /var/lib/wfilemanager/                SQLite, trash and update state
 /root/wfilemanager-recovery-kit.txt   Pro recovery kit
 /usr/local/lib/wfilemanager/          Updater and heartbeat helpers
@@ -184,8 +201,8 @@ The update system verifies the release archive, builds a separate release, switc
 - Uploads never replace an existing destination.
 - Archive entry count, expanded size, compression ratio and destination free space are checked.
 - Release archives are verified by size and SHA-256 before activation.
-- Recovery keys and exported Recovery Kits are stored with mode `0600`.
-- Pro recovery authenticates with a hashed per-instance secret; the raw recovery key is not stored by the managed backend.
+- Recovery keys, heartbeat secrets and exported Recovery Kits are stored with root-only permissions.
+- Pro routine heartbeats use a dedicated instance secret. Recovery keys are reserved for recovery operations and legacy fallback.
 
 Read [SECURITY.md](./SECURITY.md) before reporting a vulnerability.
 
@@ -219,6 +236,14 @@ WFILEMANAGER_SQLITE_PATH=./data/wfilemanager.db
 ```
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+## Support
+
+For installation, Pro activation or operational questions, contact:
+
+```text
+support@kmerhosting.com
+```
 
 ## License
 
