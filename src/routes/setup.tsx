@@ -77,8 +77,8 @@ function Setup() {
 
       {current.key === "welcome" && (
         <Card><CardContent className="space-y-4 pt-6 text-sm">
-          <p>This creates the first administrator for this wFileManager installation. The account is stored in the selected application database and is separate from Linux system accounts.</p>
-          <p className="text-muted-foreground">Administrator terminal access requires re-entering this application password and does not create a dedicated Linux user.</p>
+          <p>Create your first wFileManager admin. This is an app account, not a Linux user.</p>
+          <p className="text-muted-foreground">Terminal access uses the same app password.</p>
           {IS_PRO && (
             <div className="rounded-md border border-border bg-muted/30 p-3">
               <div className="mb-2 flex items-center gap-2">
