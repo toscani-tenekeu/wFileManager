@@ -82,6 +82,7 @@ Deno.serve(async (request: Request) => {
     const password = String(body.password || "");
     const displayName = String(body.displayName || "Administrator").trim();
     const rootResetTokenHash = String(body.rootResetTokenHash || "").trim().toLowerCase();
+    const instanceSecretHash = String(body.instanceSecretHash || "").trim().toLowerCase();
 
     if (!instanceKey) return json({ error: "Installation identity is missing" }, 400);
     if (username.length < 3) return json({ error: "Username must contain at least 3 characters" }, 400);
@@ -89,7 +90,10 @@ Deno.serve(async (request: Request) => {
     const policyError = passwordPolicyError(password);
     if (policyError) return json({ error: policyError }, 400);
     if (!/^[0-9a-f]{64}$/.test(rootResetTokenHash)) {
-      return json({ error: "The Supabase installation recovery key is not enrolled" }, 400);
+      return json({ error: "The Pro recovery key is not enrolled" }, 400);
+    }
+    if (instanceSecretHash && !/^[0-9a-f]{64}$/.test(instanceSecretHash)) {
+      return json({ error: "The Pro heartbeat credential is invalid" }, 400);
     }
 
     let { data: instance, error: instanceError } = await supabase
@@ -113,6 +117,9 @@ Deno.serve(async (request: Request) => {
         hostname: body.hostname ? String(body.hostname) : null,
         base_url: body.baseUrl ? String(body.baseUrl) : null,
         status: "active",
+        service_plan: "pro",
+        subscription_status: "active",
+        data_status: "active",
         last_seen_at: now,
       }).select().single();
       if (created.error) throw created.error;
@@ -122,6 +129,7 @@ Deno.serve(async (request: Request) => {
         hostname: body.hostname ? String(body.hostname) : instance.hostname,
         base_url: body.baseUrl ? String(body.baseUrl) : instance.base_url,
         status: "active",
+        data_status: "active",
         last_seen_at: now,
         frozen_at: null,
         delete_after_at: null,
@@ -187,6 +195,18 @@ Deno.serve(async (request: Request) => {
     }, { onConflict: "instance_id" });
     if (resetResult.error) throw resetResult.error;
 
+    if (instanceSecretHash) {
+      const credentialResult = await supabase.from("wfilemanager_instance_credentials").upsert({
+        instance_id: instance.id,
+        credential_type: "heartbeat",
+        secret_hash: instanceSecretHash,
+        last_used_at: null,
+        revoked_at: null,
+        updated_at: now,
+      }, { onConflict: "instance_id,credential_type" });
+      if (credentialResult.error) throw credentialResult.error;
+    }
+
     await supabase.from("wfilemanager_audit_logs").insert({
       instance_id: instance.id,
       user_id: userResult.data.id,
@@ -197,6 +217,7 @@ Deno.serve(async (request: Request) => {
       metadata: {
         password_policy: "admin_v2",
         recovery_key_enrolled: true,
+        heartbeat_secret_enrolled: Boolean(instanceSecretHash),
       },
       ip_address: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
       user_agent: request.headers.get("user-agent") || null,
