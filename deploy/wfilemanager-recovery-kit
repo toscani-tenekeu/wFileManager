@@ -14,7 +14,7 @@ source "$ENV_FILE"
 set +a
 
 [[ "${WFILEMANAGER_DATABASE_MODE:-}" == "supabase" ]] || {
-  echo "A Recovery Kit is only used by the managed Supabase database mode." >&2
+  echo "A Recovery Kit is only used by the Pro managed application-data plan." >&2
   exit 1
 }
 [[ -s "$RECOVERY_KEY_FILE" ]] || { echo "The recovery key file is missing." >&2; exit 1; }
@@ -30,20 +30,19 @@ wFileManager Recovery Kit
 Instance key: $INSTANCE_KEY
 Recovery key: $RECOVERY_KEY
 Domain: $DOMAIN
-Database mode: KmerHosting managed Supabase
+Application-data plan: Pro — managed application data
 
-Keep this file outside the VPS. It can recover or permanently delete the managed
-Supabase data after the server is reinstalled or lost. Recovery rotates this key,
+Keep this file outside the server. It can recover or permanently delete the managed application data after the server is reinstalled or lost. Recovery rotates this key,
 so replace every old copy after a successful recovery.
 
 Lifecycle policy:
-- A valid server heartbeat keeps the instance active.
-- After 30 days without a heartbeat, the instance is frozen and sessions are revoked.
-- After 90 days without a heartbeat or recovery, the managed Supabase data is deleted.
-- No inactivity warning email is sent.
+- A valid server heartbeat keeps the instance marked active.
+- Missing heartbeats may freeze remote sessions for security.
+- Active paid Pro application data is not deleted solely because the server is offline.
+- Permanent deletion requires an explicit removal request or the applicable service-retention policy after cancellation or expiration.
 
 To recover or delete the remote data, run the official installer and choose the
-corresponding managed Supabase action.
+corresponding Pro managed-data action.
 TEXT
 }
 
