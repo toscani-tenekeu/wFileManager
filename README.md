@@ -1,74 +1,85 @@
 # wFileManager
 
-**A modern and open source file manager for Linux servers.**  
+**A modern and open source file manager for Linux servers.**
 
-wFileManager provides a web file explorer, guarded archive handling, trash, application users, roles, notifications, verified updates and an administrator-only Linux terminal.
+wFileManager provides a web file explorer, guarded archive handling, per-user trash, application users and roles, notifications, verified updates and an administrator-only Linux terminal.
 
-> wFileManager runs with elevated privileges. Install it only on a server you control and restrict administrator accounts to trusted people.
+> wFileManager runs with elevated privileges. Install it only on a server you control and restrict administrator access to trusted people.
 
 ## Requirements
 
 - Ubuntu 20.04 LTS or newer; Ubuntu 24.04 LTS recommended
-- KVM, bare metal, or LXC with systemd and root access
+- KVM virtual machine, bare-metal server, or LXC container with systemd and root access
 - `amd64` or `arm64`
-- A domain with an A record pointing to the server's public IPv4
+- A domain with an A record pointing to the server's public IPv4 address
 - Public ports `80` and `443`
 
-Installation by IP address or plain HTTP is not supported. The installer validates DNS and configures HTTPS with Certbot.
-
-A free test subdomain can be requested at [domain.kmerhosting.com](https://domain.kmerhosting.com).
+Installation by IP address or plain HTTP is not supported. The installer verifies DNS and configures HTTPS with Certbot.
 
 ## Install
 
-Create the DNS A record first, wait for propagation, then run:
+Point your domain's A record to the public IPv4 address of the server where wFileManager will be installed. Wait until the domain resolves to that address, then run:
 
 ```bash
 curl -fsSL https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/install.sh | sudo bash
 ```
 
-The installer asks for the database mode and domain.
-
-### Database modes
-
-**KmerHosting managed Supabase** is the fastest option for evaluation and testing. Accounts, roles, sessions, notifications and related application settings are kept in the managed project. Each server is limited to 100 MB of application data.
-
-For a new managed Supabase installation, the installer can:
-
-1. create a new installation;
-2. recover an existing installation with its Recovery Kit;
-3. permanently delete an existing remote installation.
-
-**SQLite on this VPS** is recommended for long-term installations. It keeps application records locally in:
-
-```text
-/var/lib/wfilemanager/wfilemanager.db
-```
-
-Files managed in File Explorer always remain on the VPS. The selected database affects only application accounts, roles, sessions, notifications and related records. Supabase does not back up or restore the files stored on the Linux server.
-
-After a new installation, open:
+The installer asks for the domain and application-data mode. After installation, open:
 
 ```text
 https://your-domain.example/setup
 ```
 
-After recovering an existing Supabase installation, open `/login` and use the administrator credentials that were already stored in that installation.
-
 Administrator passwords require at least 12 alphanumeric characters with uppercase, lowercase and a number. Identical consecutive characters are rejected.
 
-## Managed Supabase Recovery Kit
+## Application-data modes
 
-A managed Supabase installation creates a root-only Recovery Kit at:
+The selected mode controls wFileManager application records such as users, roles, sessions, authentication information, notifications and settings. It does not control or back up the files displayed by the file manager.
+
+### Community — SQLite on your server
+
+Community is free forever and does not require a paid licence or subscription. Application records are stored locally in:
+
+```text
+/var/lib/wfilemanager/wfilemanager.db
+```
+
+The server administrator is responsible for:
+
+- SQLite database backups;
+- restores and migrations;
+- database maintenance;
+- recovery after a server reinstall or replacement.
+
+Community includes all wFileManager features and community support.
+
+### Pro — Managed application data
+
+Pro costs **$50 USD per instance per year** and includes **100 MB** of managed application storage.
+
+Pro includes:
+
+- managed users, roles, sessions and authentication records;
+- managed notifications, settings and related application records;
+- automatic backups of wFileManager application data;
+- recovery of users and application records after a server reinstall or replacement;
+- priority support.
+
+Each additional **100 MB** of managed application storage costs **$1 USD per year**.
+
+Pro storage covers wFileManager application records only. Files, directories, databases and other content on the server filesystem require a separate server backup and recovery strategy.
+
+See [Application-data modes](./docs/data-modes.md) for the complete comparison.
+
+## Pro Recovery Kit
+
+A Pro instance creates a root-only Recovery Kit at:
 
 ```text
 /root/wfilemanager-recovery-kit.txt
 ```
 
-Copy this file outside the VPS. It contains:
-
-- the installation instance key;
-- the recovery key;
-- the configured domain.
+Copy this file to a secure location outside the server. It contains the instance identity, recovery key and configured domain required to reconnect a replacement installation.
 
 Display or export the current kit:
 
@@ -77,24 +88,11 @@ sudo wfilemanager-recovery-kit show
 sudo wfilemanager-recovery-kit export /root/wfilemanager-recovery-kit.txt
 ```
 
-The Recovery Kit is required to reconnect a replacement VPS or permanently delete the managed Supabase records after the original server is lost or reinstalled. A successful recovery rotates the recovery key, revokes every previous application session and invalidates old copies of the kit.
-
-### Inactivity lifecycle
-
-Inactivity is based on the server heartbeat, not on how often a person opens the web interface. A running installation sends a signed heartbeat every 12 hours.
-
-- Before 30 days without a valid heartbeat, the installation remains active.
-- At 30 days without a valid heartbeat, the managed instance is frozen. Its data remains stored, active sessions are revoked and normal login is blocked.
-- A valid heartbeat from the original installation can reactivate a frozen instance.
-- A replacement server can reactivate it with the Recovery Kit. Recovery rotates the key and revokes old sessions.
-- At 90 days without a valid heartbeat or recovery, all managed Supabase records for the instance are permanently deleted.
-- No inactivity warning email or notification is sent.
-
-The 90-day period is counted from the last valid activity, not from the date of the freeze.
+A successful recovery rotates the recovery key and revokes previous application sessions. Recovery applies only to managed wFileManager application records; it does not restore files from the server filesystem.
 
 ## Main features
 
-- Real Linux filesystem browsing from `/`
+- Linux filesystem browsing from `/`
 - Multi-selection, copy, move, rename and delete operations
 - Uploads and downloads with progress
 - Text preview and editing
@@ -128,7 +126,7 @@ Application health:
 curl -fsS http://127.0.0.1:1973/api/health
 ```
 
-Managed Supabase heartbeat status:
+Pro managed-data heartbeat status:
 
 ```bash
 sudo systemctl status wfilemanager-heartbeat.timer --no-pager
@@ -140,8 +138,6 @@ Reset an administrator password:
 ```bash
 sudo wfilemanager-reset-admin-password
 ```
-
-The command asks for a new password and confirmation. Input is invisible while typing: no characters, dots or asterisks are displayed.
 
 Update the application:
 
@@ -155,7 +151,13 @@ Roll back to the previous verified release:
 sudo systemctl start wfilemanager-updater@rollback.service
 ```
 
-The update system verifies the archive, runs tests, builds a separate release, switches atomically, restarts the service and checks the application, database and persistent filesystem. An unhealthy release is rolled back automatically.
+Uninstall wFileManager:
+
+```bash
+curl -fsSL https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/uninstall.sh | sudo bash
+```
+
+The update system verifies the release archive, builds a separate release, switches atomically, restarts the service and checks application health. An unhealthy release is rolled back automatically.
 
 ## Persistent locations
 
@@ -163,8 +165,8 @@ The update system verifies the archive, runs tests, builds a separate release, s
 /opt/wfilemanager/                    Application releases
 /etc/wfilemanager/                    Configuration and recovery key
 /var/lib/wfilemanager/                SQLite, trash and update state
-/root/wfilemanager-recovery-kit.txt   Managed Supabase recovery kit
-/usr/local/lib/wfilemanager/          Updater and heartbeat helper
+/root/wfilemanager-recovery-kit.txt   Pro recovery kit
+/usr/local/lib/wfilemanager/          Updater and heartbeat helpers
 /usr/local/sbin/wfilemanager-*        Administration commands
 /etc/nginx/sites-available/wfilemanager
 ```
@@ -173,8 +175,8 @@ The update system verifies the archive, runs tests, builds a separate release, s
 
 - Port `1973` remains bound to `127.0.0.1`.
 - Public access is HTTPS-only through Nginx.
-- SQLite sessions are validated locally by privileged API operations.
-- Repeated SQLite sign-in failures are rate-limited by account and source IP.
+- Community SQLite sessions are validated locally by privileged API operations.
+- Repeated sign-in failures are rate-limited by account and source IP.
 - Ordinary application users never receive Linux or sudo accounts.
 - Terminal endpoints require an administrator and current-password verification.
 - Mutations through symbolic-link path components are rejected.
@@ -182,8 +184,8 @@ The update system verifies the archive, runs tests, builds a separate release, s
 - Uploads never replace an existing destination.
 - Archive entry count, expanded size, compression ratio and destination free space are checked.
 - Release archives are verified by size and SHA-256 before activation.
-- The recovery key and exported Recovery Kit are stored with mode `0600`.
-- Managed Supabase recovery authenticates with a hashed per-instance secret; the raw recovery key is not stored in Supabase.
+- Recovery keys and exported Recovery Kits are stored with mode `0600`.
+- Pro recovery authenticates with a hashed per-instance secret; the raw recovery key is not stored by the managed backend.
 
 Read [SECURITY.md](./SECURITY.md) before reporting a vulnerability.
 
@@ -208,7 +210,7 @@ bun run test
 bun run build
 ```
 
-Example local SQLite configuration:
+Example Community SQLite configuration:
 
 ```env
 VITE_WFILEMANAGER_DATABASE_MODE=sqlite
@@ -220,6 +222,6 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 
-> Project from KmerHosting LLC.
+Developed by KmerHosting LLC.
 
 MIT. See [LICENSE](./LICENSE).
