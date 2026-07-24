@@ -218,7 +218,8 @@ WFILEMANAGER_SQLITE_PATH=./data/wfilemanager.db
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-> Project from KmerHosting LLC.
 ## License
+
+> Project from KmerHosting LLC.
 
 MIT. See [LICENSE](./LICENSE).
