@@ -10,6 +10,7 @@ APP_ROOT="/opt/wfilemanager"
 CONFIG_DIR="/etc/wfilemanager"
 ENV_FILE="$CONFIG_DIR/wfilemanager.env"
 ROOT_RESET_KEY_FILE="$CONFIG_DIR/root-reset.key"
+INSTANCE_SECRET_FILE="$CONFIG_DIR/instance-secret.key"
 STATE_ROOT="/var/lib/wfilemanager"
 PACKAGES_FILE="$STATE_ROOT/installed-packages.txt"
 INSTALL_STATE_FILE="$STATE_ROOT/install-state.env"
@@ -28,8 +29,8 @@ systemd_failure() {
 
 The server system manager is not healthy ($phase; state: $state).
 wFileManager cannot safely install or manage services while systemd is unavailable.
-Reboot the VPS, wait for SSH to return, then run the same official install command again.
-The installer is idempotent and reuses the selected domain, database mode and instance identity.
+Reboot the server, wait for SSH to return, then run the same official install command again.
+The installer is idempotent and reuses the selected domain, application-data plan and instance identity.
 TEXT
   exit 1
 }
@@ -86,6 +87,10 @@ generate_recovery_key() {
   printf 'WFM-%s\n' "$(printf '%s' "$raw" | fold -w4 | paste -sd- -)"
 }
 
+generate_instance_secret() {
+  openssl rand -hex 32
+}
+
 read_secret() {
   local prompt="$1" variable=""
   [[ -r /dev/tty ]] || { echo "$prompt must be supplied through an environment variable." >&2; exit 1; }
@@ -120,13 +125,14 @@ PY
 }
 
 lifecycle_recover() {
-  local instance_key="$1" old_key="$2" new_hash="$3" response_file status message body
+  local instance_key="$1" old_key="$2" new_hash="$3" instance_secret_hash="$4" response_file status message body
   response_file="$(mktemp)"
   body="$(jq -cn \
     --arg newRecoveryTokenHash "$new_hash" \
+    --arg newInstanceSecretHash "$instance_secret_hash" \
     --arg hostname "$(hostname -f 2>/dev/null || hostname)" \
     --arg baseUrl "https://$DOMAIN" \
-    '{newRecoveryTokenHash:$newRecoveryTokenHash,hostname:$hostname,baseUrl:$baseUrl}')"
+    '{newRecoveryTokenHash:$newRecoveryTokenHash,newInstanceSecretHash:$newInstanceSecretHash,hostname:$hostname,baseUrl:$baseUrl}')"
   status="$(curl -sS --connect-timeout 10 --max-time 60 -o "$response_file" -w '%{http_code}' \
     -X POST "${LIFECYCLE_API_URL%/}/recover" \
     -H 'Content-Type: application/json' \
@@ -157,17 +163,16 @@ wFileManager Recovery Kit
 Instance key: $INSTANCE_KEY
 Recovery key: $recovery_key
 Domain: $DOMAIN
-Database mode: KmerHosting managed Supabase
+Application-data plan: Pro — managed application data
 
-Keep this file outside the VPS. It can recover or permanently delete the managed
-Supabase data after the server is reinstalled or lost. A successful recovery
+Keep this file outside the server. It can recover or permanently delete the managed application data after the server is reinstalled or lost. A successful recovery
 rotates this key, so replace every old copy.
 
 Lifecycle policy:
-- A valid server heartbeat keeps the instance active.
-- After 30 days without a heartbeat, the instance is frozen and sessions are revoked.
-- After 90 days without a heartbeat or recovery, the managed Supabase data is deleted.
-- No inactivity warning email is sent.
+- A valid server heartbeat keeps the instance marked active.
+- Missing heartbeats may freeze remote sessions for security.
+- Active paid Pro application data is not deleted solely because the server is offline.
+- Permanent deletion requires an explicit removal request or the applicable service-retention policy after cancellation or expiration.
 TEXT
   chmod 600 "$RECOVERY_KIT_FILE"
 }
@@ -190,13 +195,13 @@ while [[ "$DATABASE_MODE" != "supabase" && "$DATABASE_MODE" != "sqlite" ]]; do
 
 Choose where wFileManager stores accounts, roles, sessions and notifications:
 
-1) KmerHosting managed Supabase
-   Automatically configured for rapid testing and setup.
+1) Pro — managed application data
+   Managed by KmerHosting for paid Pro service and recovery.
 
-2) SQLite on this VPS
+2) Community — SQLite on your server
    Fully local. Data is stored in /var/lib/wfilemanager/wfilemanager.db.
 TEXT
-  read -r -p "Database mode [1-2]: " DATABASE_CHOICE </dev/tty
+  read -r -p "Application-data plan [1-2]: " DATABASE_CHOICE </dev/tty
   case "$DATABASE_CHOICE" in
     1) DATABASE_MODE="supabase" ;;
     2) DATABASE_MODE="sqlite" ;;
@@ -213,7 +218,7 @@ if [[ "$DATABASE_MODE" == "supabase" && -z "$EXISTING_INSTANCE_KEY" ]]; then
     [[ -r /dev/tty ]] || { echo "Choose WFILEMANAGER_SUPABASE_ACTION=new, recover or delete." >&2; exit 1; }
     cat >/dev/tty <<'TEXT'
 
-Managed Supabase installation:
+Pro managed application data installation:
 
 1) Create a new installation
 2) Recover an existing installation with a Recovery Kit
@@ -238,10 +243,10 @@ TEXT
 
   if [[ "$SUPABASE_ACTION" == "delete" ]]; then
     [[ -r /dev/tty ]] || { echo "Interactive confirmation is required for deletion." >&2; exit 1; }
-    read -r -p "Type DELETE to permanently remove the managed Supabase data: " DELETE_CONFIRM </dev/tty
+    read -r -p "Type DELETE to permanently remove the managed application data: " DELETE_CONFIRM </dev/tty
     [[ "$DELETE_CONFIRM" == "DELETE" ]] || { echo "Cancelled."; exit 0; }
     lifecycle_delete "$RECOVERY_INSTANCE_KEY" "$OLD_RECOVERY_KEY"
-    echo "The managed Supabase installation was permanently deleted."
+    echo "The Pro managed application data was permanently deleted."
     exit 0
   fi
 fi
@@ -274,8 +279,7 @@ PY
   then break; fi
   PUBLIC_IP=""
 done
-[[ -n "$PUBLIC_IP" ]] || { echo "Unable to detect this server's public IPv4." >&2; exit 1; }
-
+[[ -n "$PUBLIC_IP" ]] || { echo "Unable to detect this server's public IPv4 address." >&2; exit 1; }
 DNS_ADDRESSES="$(getent ahostsv4 "$DOMAIN" 2>/dev/null | awk '{print $1}' | sort -u || true)"
 if ! grep -Fxq "$PUBLIC_IP" <<<"$DNS_ADDRESSES"; then
   echo "DNS validation failed." >&2
@@ -286,8 +290,8 @@ if ! grep -Fxq "$PUBLIC_IP" <<<"$DNS_ADDRESSES"; then
 fi
 
 echo "Domain verified: $DOMAIN -> $PUBLIC_IP"
-echo "Database mode: $DATABASE_MODE"
-[[ "$DATABASE_MODE" == "supabase" ]] && echo "Supabase action: $SUPABASE_ACTION"
+echo "Application-data backend: $DATABASE_MODE"
+[[ "$DATABASE_MODE" == "supabase" ]] && echo "Pro action: $SUPABASE_ACTION"
 
 BASE_PACKAGES=(curl ca-certificates jq tar gzip xz-utils unzip openssl nginx certbot python3-certbot-nginx build-essential python3 make g++ sudo passwd util-linux)
 [[ "$DATABASE_MODE" == "sqlite" ]] && BASE_PACKAGES+=(sqlite3)
@@ -349,28 +353,47 @@ if [[ "$DATABASE_MODE" == "supabase" && "$SUPABASE_ACTION" == "continue" && ! -s
   RECOVERY_INSTANCE_KEY="$INSTANCE_KEY"
 fi
 
+INSTANCE_SECRET=""
+if [[ "$DATABASE_MODE" == "supabase" ]]; then
+  if [[ "$SUPABASE_ACTION" == "continue" && -s "$INSTANCE_SECRET_FILE" ]]; then
+    INSTANCE_SECRET="$(tr -d '\r\n' <"$INSTANCE_SECRET_FILE")"
+  else
+    INSTANCE_SECRET="$(generate_instance_secret)"
+  fi
+fi
+
 ROOT_RESET_HASH="$(printf '%s' "$RECOVERY_KEY" | sha256sum | awk '{print $1}')"
+INSTANCE_SECRET_HASH=""
+[[ -n "$INSTANCE_SECRET" ]] && INSTANCE_SECRET_HASH="$(printf '%s' "$INSTANCE_SECRET" | sha256sum | awk '{print $1}')"
 if [[ "$DATABASE_MODE" == "supabase" && "$SUPABASE_ACTION" == "recover" ]]; then
-  lifecycle_recover "$INSTANCE_KEY" "$OLD_RECOVERY_KEY" "$ROOT_RESET_HASH"
-  echo "Managed Supabase installation recovered. Previous sessions and the old recovery key are now invalid."
+  lifecycle_recover "$INSTANCE_KEY" "$OLD_RECOVERY_KEY" "$ROOT_RESET_HASH" "$INSTANCE_SECRET_HASH"
+  echo "Pro managed application data installation recovered. Previous sessions, heartbeat credentials and the old recovery key are now invalid."
 fi
 
 umask 077
 printf '%s\n' "$RECOVERY_KEY" >"$ROOT_RESET_KEY_FILE"
 chmod 600 "$ROOT_RESET_KEY_FILE"
+if [[ "$DATABASE_MODE" == "supabase" && -n "$INSTANCE_SECRET" ]]; then
+  printf '%s\n' "$INSTANCE_SECRET" >"$INSTANCE_SECRET_FILE"
+  chmod 600 "$INSTANCE_SECRET_FILE"
+fi
 
 cat >"$ENV_FILE" <<ENV
 PORT=$PORT
 WFILEMANAGER_DOMAIN=$DOMAIN
 WFILEMANAGER_PUBLIC_BASE_URL=https://$DOMAIN
+WFILEMANAGER_PLAN=$([[ "$DATABASE_MODE" == "supabase" ]] && printf 'pro' || printf 'community')
+WFILEMANAGER_DATA_BACKEND=$([[ "$DATABASE_MODE" == "supabase" ]] && printf 'managed' || printf 'sqlite')
 WFILEMANAGER_DATABASE_MODE=$DATABASE_MODE
 VITE_WFILEMANAGER_DATABASE_MODE=$DATABASE_MODE
 VITE_SUPABASE_URL=$PUBLIC_SUPABASE_URL
 VITE_WFILEMANAGER_INSTANCE_KEY=$INSTANCE_KEY
 VITE_WFILEMANAGER_ROOT_RESET_TOKEN_HASH=$ROOT_RESET_HASH
+VITE_WFILEMANAGER_INSTANCE_SECRET_HASH=$INSTANCE_SECRET_HASH
 WFILEMANAGER_SUPABASE_URL=$PUBLIC_SUPABASE_URL
 WFILEMANAGER_LIFECYCLE_API_URL=$LIFECYCLE_API_URL
 WFILEMANAGER_RECOVERY_KEY_FILE=$ROOT_RESET_KEY_FILE
+WFILEMANAGER_INSTANCE_SECRET_FILE=$INSTANCE_SECRET_FILE
 WFILEMANAGER_INSTANCE_KEY=$INSTANCE_KEY
 WFILEMANAGER_SQLITE_PATH=$STATE_ROOT/wfilemanager.db
 WFILEMANAGER_ALLOW_PSEUDO_FS_WRITE=false
@@ -480,7 +503,7 @@ echo "Database: $DATABASE_MODE"
 echo "Instance key: $INSTANCE_KEY"
 if [[ "$DATABASE_MODE" == "supabase" ]]; then
   echo "Recovery Kit: $RECOVERY_KIT_FILE"
-  echo "Copy this root-only file outside the VPS. It is required after a system reinstall."
+  echo "Copy this root-only file outside the server. It is required after a system reinstall."
 fi
 echo
 echo "You can permanently remove the application and its data at any time with:"

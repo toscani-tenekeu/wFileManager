@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 ENV_FILE="${WFILEMANAGER_ENV_FILE:-/etc/wfilemanager/wfilemanager.env}"
+INSTANCE_SECRET_FILE="${WFILEMANAGER_INSTANCE_SECRET_FILE:-/etc/wfilemanager/instance-secret.key}"
 RECOVERY_KEY_FILE="${WFILEMANAGER_RECOVERY_KEY_FILE:-/etc/wfilemanager/root-reset.key}"
 
 [[ -f "$ENV_FILE" ]] || exit 0
@@ -11,12 +12,10 @@ source "$ENV_FILE"
 set +a
 
 [[ "${WFILEMANAGER_DATABASE_MODE:-}" == "supabase" ]] || exit 0
-[[ -s "$RECOVERY_KEY_FILE" ]] || { echo "wFileManager recovery key is missing" >&2; exit 1; }
 
 INSTANCE_KEY="${WFILEMANAGER_INSTANCE_KEY:-}"
 SUPABASE_URL="${WFILEMANAGER_SUPABASE_URL:-${VITE_SUPABASE_URL:-}}"
 LIFECYCLE_URL="${WFILEMANAGER_LIFECYCLE_API_URL:-${SUPABASE_URL%/}/functions/v1/wfilemanager-instance-lifecycle-api}"
-RECOVERY_KEY="$(tr -d '\r\n' <"$RECOVERY_KEY_FILE")"
 HOSTNAME_VALUE="$(hostname -f 2>/dev/null || hostname)"
 BASE_URL="${WFILEMANAGER_PUBLIC_BASE_URL:-}"
 
@@ -24,6 +23,19 @@ BASE_URL="${WFILEMANAGER_PUBLIC_BASE_URL:-}"
   echo "wFileManager lifecycle configuration is incomplete" >&2
   exit 1
 }
+
+AUTH_HEADER=()
+if [[ -s "$INSTANCE_SECRET_FILE" ]]; then
+  INSTANCE_SECRET="$(tr -d '\r\n' <"$INSTANCE_SECRET_FILE")"
+  AUTH_HEADER=(-H "x-wfilemanager-instance-secret: $INSTANCE_SECRET")
+elif [[ -s "$RECOVERY_KEY_FILE" ]]; then
+  RECOVERY_KEY="$(tr -d '\r\n' <"$RECOVERY_KEY_FILE")"
+  AUTH_HEADER=(-H "x-wfilemanager-recovery-key: $RECOVERY_KEY")
+  echo "wFileManager heartbeat is using the legacy recovery-key fallback; regenerate the Pro instance secret during the next recovery or reinstall." >&2
+else
+  echo "wFileManager instance secret is missing" >&2
+  exit 1
+fi
 
 BODY="$(jq -cn --arg hostname "$HOSTNAME_VALUE" --arg baseUrl "$BASE_URL" '{hostname:$hostname,baseUrl:$baseUrl}')"
 RESPONSE_FILE="$(mktemp)"
@@ -34,7 +46,7 @@ HTTP_STATUS="$(curl -sS --connect-timeout 10 --max-time 45 \
   -X POST "${LIFECYCLE_URL%/}/heartbeat" \
   -H 'Content-Type: application/json' \
   -H "x-wfilemanager-instance: $INSTANCE_KEY" \
-  -H "x-wfilemanager-recovery-key: $RECOVERY_KEY" \
+  "${AUTH_HEADER[@]}" \
   --data "$BODY" || true)"
 
 if [[ "$HTTP_STATUS" != "200" ]]; then
