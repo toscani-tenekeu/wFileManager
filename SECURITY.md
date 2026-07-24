@@ -29,7 +29,7 @@ Suggested subject:
 SECURITY: short description
 ```
 
-Include the affected version, Ubuntu version, virtualization type, impact, reproduction steps and sanitized logs. Do not send real passwords, tokens, private keys, customer files or production database exports.
+Include the affected version, Ubuntu version, deployment type, impact, reproduction steps and sanitized logs. Do not send real passwords, tokens, private keys, customer files or production database exports.
 
 KmerHosting aims to acknowledge complete reports within 72 hours and coordinate remediation and disclosure. There is currently no formal paid bug-bounty program.
 
@@ -46,7 +46,7 @@ Reports are especially relevant for:
 - update verification or rollback bypass;
 - persistent XSS in privileged pages;
 - unsafe access to `/proc`, `/sys`, `/dev` or `/run`;
-- weaknesses in the managed Supabase or local SQLite backends.
+- weaknesses in the Community SQLite or Pro managed application-data backends.
 
 Expected administrator capabilities are not vulnerabilities by themselves. A report must show access beyond the user's intended permissions or a bypass of a security boundary.
 
@@ -60,18 +60,18 @@ Do not access other users' data, interrupt production, perform destructive tests
 
 Production installations must:
 
-- use a domain whose A record points to the server's IPv4;
+- use a domain whose A record points to the server's public IPv4 address;
 - use HTTPS on the entire session;
 - keep port `1973` bound to localhost;
 - protect SSH, root access and `/etc/wfilemanager`;
 - restrict administrator accounts;
 - apply Ubuntu and wFileManager updates;
-- maintain independent backups;
+- maintain independent server backups;
 - remove unused users and sessions.
 
 The systemd service runs as `root` by design. Compromise of the application or an administrator account may compromise the entire server.
 
-## Authentication and data
+## Authentication and application data
 
 Administrator passwords require at least 12 alphanumeric characters, uppercase, lowercase and a number, with no identical consecutive characters. Validation must occur on the server.
 
@@ -81,14 +81,16 @@ There is no public password-reset page. Recovery is performed from a root shell:
 sudo wfilemanager-reset-admin-password
 ```
 
-The root recovery file must remain readable only by root. Password recovery revokes existing sessions.
+Recovery files must remain readable only by root. Password recovery revokes existing sessions.
 
 wFileManager supports:
 
-- KmerHosting managed Supabase, isolated by installation key;
-- local SQLite stored under `/var/lib/wfilemanager`.
+- Community SQLite stored under `/var/lib/wfilemanager` on the user's server;
+- Pro managed application data isolated by installation key.
 
-SQLite must retain WAL mode, foreign keys, parameterized queries and root-only file permissions. Supabase queries must retain instance and user isolation.
+Community SQLite must retain WAL mode, foreign keys, parameterized queries and root-only file permissions. Pro managed queries must retain installation and user isolation.
+
+Pro backups and recovery cover wFileManager application records only. Files and other data on the server filesystem require a separate backup and recovery strategy.
 
 ## Filesystem and update protections
 
