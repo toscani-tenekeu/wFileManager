@@ -1,7 +1,6 @@
 # wFileManager
 
 **A modern and open source file manager for Linux servers.**  
-A project from **KmerHosting LLC**.
 
 wFileManager provides a web file explorer, guarded archive handling, trash, application users, roles, notifications, verified updates and an administrator-only Linux terminal.
 
@@ -219,6 +218,7 @@ WFILEMANAGER_SQLITE_PATH=./data/wfilemanager.db
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
+> Project from KmerHosting LLC.
 ## License
 
 MIT. See [LICENSE](./LICENSE).
