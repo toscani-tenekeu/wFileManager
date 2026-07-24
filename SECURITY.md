@@ -20,7 +20,7 @@ Do not publish an unpatched vulnerability in an issue, discussion, pull request 
 Email:
 
 ```text
-support.wfilemanager@kmerhosting.com
+support@kmerhosting.com
 ```
 
 Suggested subject:
