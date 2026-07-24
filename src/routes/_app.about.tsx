@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Info, Github, BookOpen, Bug, RefreshCw, Download, RotateCcw, ShieldAlert } from "lucide-react";
+import { Info, Github, BookOpen, Bug, RefreshCw, Download, RotateCcw, ShieldAlert, Mail } from "lucide-react";
 import { SERVER_INFO } from "@/lib/demo/data";
 import { localApi, type UpdateInfo } from "@/lib/local-api";
 import { formatBytes, formatRelative } from "@/lib/format";
@@ -19,6 +19,33 @@ export const Route = createFileRoute("/_app/about")({
 });
 
 const ACTIVE_PHASES = new Set(["checking", "downloading", "verifying", "extracting", "installing", "building", "switching", "restarting", "health-check", "rolling-back"]);
+const SUPPORT_EMAIL = "support@kmerhosting.com";
+const DATA_BACKEND = String(import.meta.env.VITE_WFILEMANAGER_DATABASE_MODE || "sqlite").toLowerCase();
+const IS_PRO = DATA_BACKEND === "supabase";
+
+const edition = IS_PRO
+  ? {
+      name: "Pro",
+      badge: "Managed application data",
+      backend: "KmerHosting managed backend",
+      price: "$50 USD per instance per year",
+      storage: "100 MB included · +$1 USD/year per additional 100 MB",
+      responsibility: "KmerHosting manages wFileManager application records, backups and recovery metadata.",
+      recovery: "Recovery Kit reconnects users, roles, sessions, authentication records, notifications and settings after a server reinstall.",
+      excludes: "Server filesystem files, directories, databases and uploads are not included and require a separate server backup.",
+      support: "Priority support",
+    }
+  : {
+      name: "Community",
+      badge: "SQLite on your server",
+      backend: "Local SQLite database",
+      price: "Free forever",
+      storage: "/var/lib/wfilemanager/wfilemanager.db",
+      responsibility: "You manage the local database, backups, restores, migrations and server maintenance.",
+      recovery: "Recovery depends on your own server and SQLite backup strategy.",
+      excludes: "Server filesystem files, directories, databases and uploads still require a separate server backup.",
+      support: "Community support",
+    };
 
 function About() {
   const { user } = useAuth();
@@ -70,7 +97,7 @@ function About() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-3xl p-6">
+    <div className="mx-auto w-full max-w-4xl p-6">
       <div className="mb-6 flex items-center gap-3">
         <Info className="h-5 w-5" />
         <div><h1 className="text-xl font-semibold tracking-tight">About & updates</h1><p className="text-sm text-muted-foreground">wFileManager — A project from KmerHosting LLC</p></div>
@@ -81,11 +108,38 @@ function About() {
         <CardContent>
           <dl className="grid grid-cols-3 gap-y-2 text-sm">
             <dt className="text-muted-foreground">Version</dt><dd className="col-span-2 font-mono">{update?.currentVersion || SERVER_INFO.wfmVersion}</dd>
+            <dt className="text-muted-foreground">Edition</dt><dd className="col-span-2"><Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">{edition.name}</Badge></dd>
             <dt className="text-muted-foreground">License</dt><dd className="col-span-2">MIT</dd>
             <dt className="text-muted-foreground">Supported OS</dt><dd className="col-span-2">Ubuntu 20.04 LTS and newer</dd>
             <dt className="text-muted-foreground">Recommended</dt><dd className="col-span-2"><Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">Ubuntu 24.04 LTS</Badge></dd>
             <dt className="text-muted-foreground">Publisher</dt><dd className="col-span-2">KmerHosting LLC</dd>
+            <dt className="text-muted-foreground">Support</dt><dd className="col-span-2"><a className="font-medium text-primary hover:underline" href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></dd>
           </dl>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+            Edition details
+            <Badge variant="outline">{edition.badge}</Badge>
+          </CardTitle>
+          <CardDescription>Current installation plan and data responsibility.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <dl className="grid gap-3 text-sm md:grid-cols-3">
+            <dt className="text-muted-foreground">Current edition</dt><dd className="md:col-span-2 font-medium">{edition.name}</dd>
+            <dt className="text-muted-foreground">Application data backend</dt><dd className="md:col-span-2">{edition.backend}</dd>
+            <dt className="text-muted-foreground">Price</dt><dd className="md:col-span-2">{edition.price}</dd>
+            <dt className="text-muted-foreground">Storage</dt><dd className="md:col-span-2 font-mono text-xs">{edition.storage}</dd>
+            <dt className="text-muted-foreground">Responsibility</dt><dd className="md:col-span-2">{edition.responsibility}</dd>
+            <dt className="text-muted-foreground">Recovery</dt><dd className="md:col-span-2">{edition.recovery}</dd>
+            <dt className="text-muted-foreground">Not included</dt><dd className="md:col-span-2">{edition.excludes}</dd>
+            <dt className="text-muted-foreground">Support level</dt><dd className="md:col-span-2">{edition.support}</dd>
+          </dl>
+          <div className="mt-4 rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+            Community and Pro expose the same file-manager features. The difference is where wFileManager application records are stored and who is responsible for their backup and recovery.
+          </div>
         </CardContent>
       </Card>
 
@@ -127,11 +181,12 @@ function About() {
 
       <Card className="mt-4">
         <CardHeader><CardTitle className="text-base">Links</CardTitle></CardHeader>
-        <CardContent className="grid gap-2 sm:grid-cols-3">
+        <CardContent className="grid gap-2 sm:grid-cols-4">
           {[
             { icon: BookOpen, label: "Documentation", href: "/docs" },
             { icon: Github, label: "Source code", href: "https://github.com/toscani-tenekeu/wFileManager" },
             { icon: Bug, label: "Issue tracker", href: "https://github.com/toscani-tenekeu/wFileManager/issues" },
+            { icon: Mail, label: "Support", href: `mailto:${SUPPORT_EMAIL}` },
           ].map((link) => { const Icon = link.icon; return <a key={link.label} href={link.href} target={link.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer" className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"><Icon className="h-4 w-4 text-muted-foreground" />{link.label}</a>; })}
         </CardContent>
       </Card>
