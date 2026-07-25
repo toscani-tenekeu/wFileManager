@@ -119,14 +119,7 @@ export interface InstanceStatusResponse {
 }
 
 type GatewayScope =
-  | "auth"
-  | "login"
-  | "setup"
-  | "roles"
-  | "account"
-  | "users"
-  | "presence"
-  | "notifications";
+  "auth" | "login" | "setup" | "roles" | "account" | "users" | "presence" | "notifications";
 
 function gatewayUrl(scope: GatewayScope, action: string) {
   const query = new URLSearchParams({ scope, action });
