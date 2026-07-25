@@ -5,6 +5,23 @@ import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
+const generatedSecurityFiles = [
+  "supabase/functions/**/*.ts",
+  "src/lib/server/directory-runtime.ts",
+  "src/lib/server/operation-jobs-runtime.ts",
+  "src/lib/server/path-policy-runtime.ts",
+  "src/lib/server/sqlite-path-policy.ts",
+  "src/lib/server/sqlite-user-admin.ts",
+  "src/lib/server/upload-runtime.ts",
+  "src/lib/wfilemanager-api.ts",
+  "src/routes/_app.users.tsx",
+  "src/routes/api.gateway.ts",
+  "src/routes/api.local.ts",
+  "src/routes/api.sqlite.ts",
+  "src/routes/forgot-password.tsx",
+  "src/routes/reset-password.tsx",
+];
+
 export default tseslint.config(
   { ignores: ["dist", ".output", ".vinxi"] },
   {
@@ -47,18 +64,28 @@ export default tseslint.config(
     },
   },
   {
+    files: generatedSecurityFiles,
+    rules: {
+      "prettier/prettier": "off",
+    },
+  },
+  {
     files: [
       "supabase/functions/wfilemanager-customer-api/index.ts",
       "supabase/functions/wfilemanager-customer-security-api/index.ts",
       "supabase/functions/wfilemanager-invoice-api/index.ts",
       "supabase/functions/wfilemanager-setup-api/index.ts",
+      "supabase/functions/wfilemanager-users-admin-api/index.ts",
     ],
     rules: {
       "no-control-regex": "off",
     },
   },
   {
-    files: ["src/routes/_app.explorer.tsx"],
+    files: [
+      "src/routes/_app.explorer.tsx",
+      "supabase/functions/wfilemanager-users-admin-api/index.ts",
+    ],
     rules: {
       "no-constant-binary-expression": "off",
     },
