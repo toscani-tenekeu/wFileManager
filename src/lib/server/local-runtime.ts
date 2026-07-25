@@ -39,11 +39,16 @@ const AUTH_URL = `${SUPABASE_URL}/functions/v1/wfilemanager-api/me`;
 const VERIFY_PASSWORD_URL = `${SUPABASE_URL}/functions/v1/wfilemanager-api/verify-password`;
 const ROLE_ACCESS_URL = `${SUPABASE_URL}/functions/v1/wfilemanager-roles-api/permissions`;
 const MAX_TEXT_BYTES = Number(process.env.WFILEMANAGER_MAX_TEXT_BYTES || 5 * 1024 * 1024);
-const TRASH_ROOT = path.resolve(process.env.WFILEMANAGER_TRASH_DIR || "/var/lib/wfilemanager/trash");
-const UPDATE_MANIFEST_URL = process.env.WFILEMANAGER_UPDATE_MANIFEST_URL ||
+const TRASH_ROOT = path.resolve(
+  process.env.WFILEMANAGER_TRASH_DIR || "/var/lib/wfilemanager/trash",
+);
+const UPDATE_MANIFEST_URL =
+  process.env.WFILEMANAGER_UPDATE_MANIFEST_URL ||
   "https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/stable.json";
-const UPDATE_STATE_FILE = process.env.WFILEMANAGER_UPDATE_STATE_FILE || "/var/lib/wfilemanager/update/state.json";
-const UPDATE_SCRIPT = process.env.WFILEMANAGER_UPDATE_SCRIPT || "/usr/local/lib/wfilemanager/update.sh";
+const UPDATE_STATE_FILE =
+  process.env.WFILEMANAGER_UPDATE_STATE_FILE || "/var/lib/wfilemanager/update/state.json";
+const UPDATE_SCRIPT =
+  process.env.WFILEMANAGER_UPDATE_SCRIPT || "/usr/local/lib/wfilemanager/update.sh";
 
 const authCache = new Map<string, { expiresAt: number; user: LocalUser }>();
 
@@ -119,7 +124,7 @@ export async function requireUser(request: Request): Promise<LocalUser> {
     throw new LocalApiError(401, "Your wFileManager session is invalid or expired");
   }
 
-  const payload = await response.json() as { user?: LocalUser };
+  const payload = (await response.json()) as { user?: LocalUser };
   if (!payload.user || payload.user.status !== "active") {
     throw new LocalApiError(403, "This account is not active");
   }
@@ -133,7 +138,7 @@ export async function requireUser(request: Request): Promise<LocalUser> {
       },
     });
     if (roleResponse.ok) {
-      const access = await roleResponse.json() as {
+      const access = (await roleResponse.json()) as {
         roleId?: string | null;
         roleName?: string | null;
         permissions?: string[];
@@ -142,7 +147,9 @@ export async function requireUser(request: Request): Promise<LocalUser> {
         ...user,
         roleId: access.roleId ?? user.roleId,
         roleName: access.roleName ?? user.roleName,
-        permissions: Array.isArray(access.permissions) ? access.permissions.filter((permission) => permission !== "use_terminal") : [],
+        permissions: Array.isArray(access.permissions)
+          ? access.permissions.filter((permission) => permission !== "use_terminal")
+          : [],
       };
     }
   } catch {
@@ -154,21 +161,29 @@ export async function requireUser(request: Request): Promise<LocalUser> {
 }
 
 export function assertAdmin(user: LocalUser) {
-  if (!user.isAdmin) throw new LocalApiError(403, "Administrator access is required for this operation");
+  if (!user.isAdmin)
+    throw new LocalApiError(403, "Administrator access is required for this operation");
 }
 
 export function assertPermission(user: LocalUser, permission: string) {
   if (user.isAdmin) return;
-  if (permission === "use_terminal") throw new LocalApiError(403, "Terminal access is reserved for administrators");
+  if (permission === "use_terminal")
+    throw new LocalApiError(403, "Terminal access is reserved for administrators");
   if (!Array.isArray(user.permissions) || !user.permissions.includes(permission)) {
-    throw new LocalApiError(403, `Your role does not include the ${permission.replace(/_/g, " ")} permission`);
+    throw new LocalApiError(
+      403,
+      `Your role does not include the ${permission.replace(/_/g, " ")} permission`,
+    );
   }
 }
 
 export function assertAnyPermission(user: LocalUser, permissions: string[]) {
   if (user.isAdmin) return;
   const assignable = permissions.filter((permission) => permission !== "use_terminal");
-  if (!Array.isArray(user.permissions) || !assignable.some((permission) => user.permissions?.includes(permission))) {
+  if (
+    !Array.isArray(user.permissions) ||
+    !assignable.some((permission) => user.permissions?.includes(permission))
+  ) {
     throw new LocalApiError(403, "Your role does not allow this operation");
   }
 }
@@ -205,9 +220,12 @@ export async function verifyCurrentPassword(request: Request, passwordInput: unk
     },
     body: JSON.stringify({ password }),
   });
-  const payload = await response.json().catch(() => ({})) as { valid?: boolean; error?: string };
+  const payload = (await response.json().catch(() => ({}))) as { valid?: boolean; error?: string };
   if (!response.ok || !payload.valid) {
-    throw new LocalApiError(response.status === 429 ? 429 : 401, payload.error || "The password is incorrect");
+    throw new LocalApiError(
+      response.status === 429 ? 429 : 401,
+      payload.error || "The password is incorrect",
+    );
   }
   return true;
 }
@@ -225,17 +243,31 @@ function isInside(target: string, root: string) {
 function assertSafeWrite(target: string) {
   if (target === "/") throw new LocalApiError(400, "The root directory itself cannot be modified");
   if (isInside(target, TRASH_ROOT)) {
-    throw new LocalApiError(403, "The internal wFileManager trash cannot be modified from File Explorer");
+    throw new LocalApiError(
+      403,
+      "The internal wFileManager trash cannot be modified from File Explorer",
+    );
   }
   if (process.env.WFILEMANAGER_ALLOW_PSEUDO_FS_WRITE === "true") return;
   const blocked = ["/proc", "/sys", "/dev", "/run"].find((root) => isInside(target, root));
-  if (blocked) throw new LocalApiError(403, `Writes to ${blocked} are disabled because it is a kernel-managed filesystem`);
+  if (blocked)
+    throw new LocalApiError(
+      403,
+      `Writes to ${blocked} are disabled because it is a kernel-managed filesystem`,
+    );
 }
 
 function safeName(input: unknown) {
   if (typeof input !== "string") throw new LocalApiError(400, "A name is required");
   const value = input.trim();
-  if (!value || value === "." || value === ".." || value.includes("/") || value.includes("\\") || value.includes("\0")) {
+  if (
+    !value ||
+    value === "." ||
+    value === ".." ||
+    value.includes("/") ||
+    value.includes("\\") ||
+    value.includes("\0")
+  ) {
     throw new LocalApiError(400, "Invalid filename");
   }
   return value;
@@ -292,8 +324,12 @@ function mimeFor(filePath: string, kind: LocalFileEntry["kind"]) {
 
 async function permissionsFor(target: string) {
   const [readable, writable] = await Promise.all([
-    access(target, fsConstants.R_OK).then(() => true).catch(() => false),
-    access(target, fsConstants.W_OK).then(() => true).catch(() => false),
+    access(target, fsConstants.R_OK)
+      .then(() => true)
+      .catch(() => false),
+    access(target, fsConstants.W_OK)
+      .then(() => true)
+      .catch(() => false),
   ]);
   return { readable, writable };
 }
@@ -331,7 +367,9 @@ export async function listDirectory(inputPath: unknown) {
   const names = await readdir(target);
   const settled = await Promise.allSettled(names.map((name) => entryFor(target, name)));
   const entries = settled
-    .filter((result): result is PromiseFulfilledResult<LocalFileEntry> => result.status === "fulfilled")
+    .filter(
+      (result): result is PromiseFulfilledResult<LocalFileEntry> => result.status === "fulfilled",
+    )
     .map((result) => result.value)
     .sort((left, right) => {
       if (left.kind !== right.kind) {
@@ -359,10 +397,14 @@ export async function readTextFile(inputPath: unknown) {
   if (!info) throw new LocalApiError(404, "File not found");
   if (!info.isFile()) throw new LocalApiError(400, "The selected path is not a regular file");
   if (info.size > MAX_TEXT_BYTES) {
-    throw new LocalApiError(413, `This file exceeds the ${Math.round(MAX_TEXT_BYTES / 1024 / 1024)} MB editor limit`);
+    throw new LocalApiError(
+      413,
+      `This file exceeds the ${Math.round(MAX_TEXT_BYTES / 1024 / 1024)} MB editor limit`,
+    );
   }
   const buffer = await readFile(target);
-  if (looksBinary(buffer)) throw new LocalApiError(415, "Binary files cannot be edited in the text editor");
+  if (looksBinary(buffer))
+    throw new LocalApiError(415, "Binary files cannot be edited in the text editor");
   return {
     path: target,
     content: buffer.toString("utf8"),
@@ -377,9 +419,13 @@ export async function saveTextFile(inputPath: unknown, content: unknown) {
   const target = normalizeServerPath(inputPath);
   assertSafeWrite(target);
   if (typeof content !== "string") throw new LocalApiError(400, "File content must be text");
-  if (Buffer.byteLength(content) > MAX_TEXT_BYTES) throw new LocalApiError(413, "Content is too large");
+  if (Buffer.byteLength(content) > MAX_TEXT_BYTES)
+    throw new LocalApiError(413, "Content is too large");
 
-  const handle = await open(target, fsConstants.O_WRONLY | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW);
+  const handle = await open(
+    target,
+    fsConstants.O_WRONLY | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW,
+  );
   try {
     await handle.writeFile(content, { encoding: "utf8" });
   } finally {
@@ -393,7 +439,11 @@ export async function createFileAt(parentPath: unknown, nameInput: unknown, cont
   const name = safeName(nameInput);
   const target = path.join(parent, name);
   assertSafeWrite(target);
-  const handle = await open(target, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW, 0o600);
+  const handle = await open(
+    target,
+    fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW,
+    0o600,
+  );
   try {
     await handle.writeFile(typeof content === "string" ? content : "", { encoding: "utf8" });
   } finally {
@@ -412,10 +462,12 @@ export async function createDirectoryAt(parentPath: unknown, nameInput: unknown)
 }
 
 async function ensureDestinationAbsent(destination: string) {
-  const exists = await lstat(destination).then(() => true).catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "ENOENT") return false;
-    throw error;
-  });
+  const exists = await lstat(destination)
+    .then(() => true)
+    .catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return false;
+      throw error;
+    });
   if (exists) throw new LocalApiError(409, `Destination already exists: ${destination}`);
 }
 
@@ -434,7 +486,8 @@ export async function changeMode(inputPath: unknown, modeInput: unknown) {
   const target = normalizeServerPath(inputPath);
   assertSafeWrite(target);
   const modeText = String(modeInput || "").replace(/^0o?/, "");
-  if (!/^[0-7]{3,4}$/.test(modeText)) throw new LocalApiError(400, "Mode must be an octal value such as 0644 or 0755");
+  if (!/^[0-7]{3,4}$/.test(modeText))
+    throw new LocalApiError(400, "Mode must be an octal value such as 0644 or 0755");
   await chmod(target, Number.parseInt(modeText, 8));
   return { path: target, mode: modeText.padStart(4, "0") };
 }
@@ -462,7 +515,8 @@ function safeTrashOwner(ownerUserId: string) {
 
 function safeTrashId(idInput: unknown) {
   const id = String(idInput || "");
-  if (!/^[a-zA-Z0-9_-]{8,100}$/.test(id)) throw new LocalApiError(400, "Invalid trash item identifier");
+  if (!/^[a-zA-Z0-9_-]{8,100}$/.test(id))
+    throw new LocalApiError(400, "Invalid trash item identifier");
   return id;
 }
 
@@ -535,11 +589,13 @@ export async function listTrash(user: LocalUser) {
   const ownerRoot = trashOwnerRoot(user.id);
   await mkdir(ownerRoot, { recursive: true, mode: 0o700 });
   const ids = await readdir(ownerRoot).catch(() => [] as string[]);
-  const settled = await Promise.allSettled(ids.map(async (id) => {
-    const item = await loadTrashMetadata(user.id, id);
-    await lstat(trashPaths(user.id, id).payload);
-    return item;
-  }));
+  const settled = await Promise.allSettled(
+    ids.map(async (id) => {
+      const item = await loadTrashMetadata(user.id, id);
+      await lstat(trashPaths(user.id, id).payload);
+      return item;
+    }),
+  );
   const items = settled
     .filter((result): result is PromiseFulfilledResult<TrashItem> => result.status === "fulfilled")
     .map((result) => result.value)
@@ -567,7 +623,10 @@ export async function moveToTrash(user: LocalUser, inputPath: unknown) {
     size: items.reduce((sum, item) => sum + item.size, 0),
     kind: fileKind(info),
   };
-  await writeFile(locations.metadata, JSON.stringify(metadata, null, 2), { mode: 0o600, flag: "wx" });
+  await writeFile(locations.metadata, JSON.stringify(metadata, null, 2), {
+    mode: 0o600,
+    flag: "wx",
+  });
 
   try {
     await rename(source, locations.payload);
@@ -620,7 +679,20 @@ export async function emptyTrash(user: LocalUser) {
 }
 
 export interface UpdateState {
-  status: "idle" | "checking" | "downloading" | "verifying" | "extracting" | "installing" | "building" | "switching" | "restarting" | "health-check" | "completed" | "failed" | "rolling-back";
+  status:
+    | "idle"
+    | "checking"
+    | "downloading"
+    | "verifying"
+    | "extracting"
+    | "installing"
+    | "building"
+    | "switching"
+    | "restarting"
+    | "health-check"
+    | "completed"
+    | "failed"
+    | "rolling-back";
   progress: number;
   message: string;
   currentVersion?: string | null;
@@ -657,7 +729,9 @@ async function readUpdateState(currentVersion?: string): Promise<UpdateState> {
 async function installedVersion() {
   let currentVersion = process.env.WFILEMANAGER_VERSION || "0.7.3";
   try {
-    const packageJson = JSON.parse(await readFile(path.join(process.cwd(), "package.json"), "utf8")) as { version?: string };
+    const packageJson = JSON.parse(
+      await readFile(path.join(process.cwd(), "package.json"), "utf8"),
+    ) as { version?: string };
     if (typeof packageJson.version === "string") currentVersion = packageJson.version;
   } catch {
     // Use the embedded version.
@@ -666,8 +740,14 @@ async function installedVersion() {
 }
 
 function compareVersions(left: string, right: string) {
-  const first = left.split(/[.-]/).slice(0, 3).map((value) => Number(value) || 0);
-  const second = right.split(/[.-]/).slice(0, 3).map((value) => Number(value) || 0);
+  const first = left
+    .split(/[.-]/)
+    .slice(0, 3)
+    .map((value) => Number(value) || 0);
+  const second = right
+    .split(/[.-]/)
+    .slice(0, 3)
+    .map((value) => Number(value) || 0);
   for (let index = 0; index < 3; index += 1) {
     if ((first[index] || 0) > (second[index] || 0)) return 1;
     if ((first[index] || 0) < (second[index] || 0)) return -1;
@@ -686,7 +766,7 @@ export async function updateSummary() {
       headers: { Accept: "application/json", "Cache-Control": "no-cache" },
     });
     if (!response.ok) throw new Error(`Update server returned ${response.status}`);
-    const payload = await response.json() as {
+    const payload = (await response.json()) as {
       version?: string;
       url?: string;
       releaseUrl?: string;
@@ -699,13 +779,20 @@ export async function updateSummary() {
     const latestVersion = typeof payload.version === "string" ? payload.version : null;
     const notes = Array.isArray(payload.notes)
       ? payload.notes.join("\n")
-      : typeof payload.notes === "string" ? payload.notes : null;
+      : typeof payload.notes === "string"
+        ? payload.notes
+        : null;
     return {
       currentVersion,
       latestVersion,
       updateAvailable: Boolean(latestVersion && compareVersions(latestVersion, currentVersion) > 0),
       sourceConfigured: true,
-      downloadUrl: typeof payload.releaseUrl === "string" ? payload.releaseUrl : typeof payload.url === "string" ? payload.url : null,
+      downloadUrl:
+        typeof payload.releaseUrl === "string"
+          ? payload.releaseUrl
+          : typeof payload.url === "string"
+            ? payload.url
+            : null,
       notes,
       publishedAt: typeof payload.publishedAt === "string" ? payload.publishedAt : null,
       size: typeof payload.size === "number" ? payload.size : null,
@@ -731,7 +818,10 @@ async function startUpdater(action: "install" | "rollback") {
     await execFileAsync("/usr/bin/systemctl", ["start", "--no-block", unit], { timeout: 10_000 });
   } catch (error) {
     const value = error as NodeJS.ErrnoException & { stderr?: string };
-    throw new LocalApiError(500, value.stderr?.trim() || value.message || `Unable to start ${action}`);
+    throw new LocalApiError(
+      500,
+      value.stderr?.trim() || value.message || `Unable to start ${action}`,
+    );
   }
   await new Promise((resolve) => setTimeout(resolve, 250));
   return { success: true as const, state: await readUpdateState(await installedVersion()) };
@@ -770,15 +860,14 @@ type RuntimeState = typeof globalThis & {
 };
 
 const runtime = globalThis as RuntimeState;
-const operationJobs = runtime.__wfilemanagerJobs ??= new Map<string, OperationJob>();
+const operationJobs = (runtime.__wfilemanagerJobs ??= new Map<string, OperationJob>());
 
 function updateJob(job: OperationJob, patch: Partial<OperationJob>) {
   Object.assign(job, patch, { updatedAt: Date.now() });
   const numerator = job.totalBytes > 0 ? job.processedBytes : job.processedItems;
   const denominator = job.totalBytes > 0 ? job.totalBytes : job.totalItems;
-  job.progress = denominator > 0
-    ? Math.max(0, Math.min(100, Math.round((numerator / denominator) * 100)))
-    : 0;
+  job.progress =
+    denominator > 0 ? Math.max(0, Math.min(100, Math.round((numerator / denominator) * 100))) : 0;
 }
 
 async function copyTree(source: string, destination: string, job: OperationJob) {
@@ -893,7 +982,8 @@ export function startOperationJob(
   destinationInput?: unknown,
 ) {
   const operation = String(operationInput || "") as OperationName;
-  if (!["copy", "move", "delete"].includes(operation)) throw new LocalApiError(400, "Unsupported operation");
+  if (!["copy", "move", "delete"].includes(operation))
+    throw new LocalApiError(400, "Unsupported operation");
   const source = normalizeServerPath(sourceInput);
   const destination = destinationInput == null ? undefined : normalizeServerPath(destinationInput);
   const id = crypto.randomUUID();
@@ -927,10 +1017,14 @@ export function getOperationJob(ownerUserId: string, idInput: unknown) {
   return publicJob(job);
 }
 
-const jobCleanupTimer = setInterval(() => {
-  const staleBefore = Date.now() - 60 * 60 * 1000;
-  for (const [id, job] of operationJobs) {
-    if (job.updatedAt < staleBefore && ["completed", "failed"].includes(job.status)) operationJobs.delete(id);
-  }
-}, 10 * 60 * 1000);
+const jobCleanupTimer = setInterval(
+  () => {
+    const staleBefore = Date.now() - 60 * 60 * 1000;
+    for (const [id, job] of operationJobs) {
+      if (job.updatedAt < staleBefore && ["completed", "failed"].includes(job.status))
+        operationJobs.delete(id);
+    }
+  },
+  10 * 60 * 1000,
+);
 (jobCleanupTimer as unknown as { unref?: () => void }).unref?.();

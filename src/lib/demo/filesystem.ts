@@ -234,8 +234,7 @@ export const ROOT: FsNode = dir("/", [
     file("hosts", { size: 220, content: "127.0.0.1 localhost\n127.0.1.1 app-prod-01\n" }),
     file("os-release", {
       size: 220,
-      content:
-        'NAME="Ubuntu"\nVERSION="24.04 LTS (Noble Numbat)"\nID=ubuntu\nVERSION_ID="24.04"\n',
+      content: 'NAME="Ubuntu"\nVERSION="24.04 LTS (Noble Numbat)"\nID=ubuntu\nVERSION_ID="24.04"\n',
     }),
     file("fstab", { size: 340 }),
   ]),
@@ -287,11 +286,7 @@ export const ROOT: FsNode = dir("/", [
     ],
     { owner: "root", group: "root" },
   ),
-  dir(
-    "root",
-    [file(".bash_history", { size: 2048, hidden: true, mode: "600" })],
-    { mode: "700" },
-  ),
+  dir("root", [file(".bash_history", { size: 2048, hidden: true, mode: "600" })], { mode: "700" }),
   dir("opt", [
     dir(
       "wfilemanager.kmerhosting.com",
@@ -327,10 +322,7 @@ export const ROOT: FsNode = dir("/", [
               size: 812,
               content: "<!doctype html><html><body><h1>Example</h1></body></html>",
             }),
-            dir("assets", [
-              file("app.css", { size: 42_000 }),
-              file("app.js", { size: 128_000 }),
-            ]),
+            dir("assets", [file("app.css", { size: 42_000 }), file("app.js", { size: 128_000 })]),
             dir("uploads", [
               file("brochure.pdf", { size: 890_000 }),
               file("banner.webp", { size: 220_000 }),

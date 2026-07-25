@@ -23,11 +23,26 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 type DocCategory = "Basics" | "Files" | "Transfers" | "Administration" | "Safety";
 type NoteTone = "info" | "warning" | "danger";
-type AppRoute = "/" | "/explorer" | "/uploads" | "/trash" | "/terminal" | "/users" | "/roles" | "/notifications" | "/account" | "/about";
+type AppRoute =
+  | "/"
+  | "/explorer"
+  | "/uploads"
+  | "/trash"
+  | "/terminal"
+  | "/users"
+  | "/roles"
+  | "/notifications"
+  | "/account"
+  | "/about";
 
 type DocSection = {
   id: string;
@@ -72,7 +87,13 @@ const SECTIONS: DocSection[] = [
       "Mosaic view is available from the view selector and the preference is remembered in the browser.",
       "Hidden files can be displayed from the explorer toolbar.",
     ],
-    notes: [{ tone: "warning", title: "Sensitive locations", body: "Directories such as /etc, /root, /boot and /var/lib may contain files required by Linux or installed services." }],
+    notes: [
+      {
+        tone: "warning",
+        title: "Sensitive locations",
+        body: "Directories such as /etc, /root, /boot and /var/lib may contain files required by Linux or installed services.",
+      },
+    ],
   },
   {
     id: "operations",
@@ -87,7 +108,13 @@ const SECTIONS: DocSection[] = [
       "Mutating operations reject paths that traverse symbolic links into protected kernel-managed locations.",
       "Long copy, move and delete operations expose progress and return explicit failures.",
     ],
-    notes: [{ tone: "danger", title: "System impact", body: "Editing or moving a system file can prevent services from starting. Verify the absolute path before confirming." }],
+    notes: [
+      {
+        tone: "danger",
+        title: "System impact",
+        body: "Editing or moving a system file can prevent services from starting. Verify the absolute path before confirming.",
+      },
+    ],
   },
   {
     id: "permissions",
@@ -173,7 +200,13 @@ const SECTIONS: DocSection[] = [
       "The shell runs directly as root; wFileManager does not create a dedicated Linux user and does not add application users to sudo.",
       "The server limits concurrent sessions, terminal input, retained output and idle duration.",
     ],
-    notes: [{ tone: "danger", title: "Root shell", body: "Root commands affect the entire server immediately and are not reversible by wFileManager." }],
+    notes: [
+      {
+        tone: "danger",
+        title: "Root shell",
+        body: "Root commands affect the entire server immediately and are not reversible by wFileManager.",
+      },
+    ],
   },
   {
     id: "users",
@@ -247,7 +280,13 @@ const SECTIONS: DocSection[] = [
       "After 90 days from the last valid activity, the managed Supabase records are permanently deleted. No inactivity warning is sent.",
       "Run sudo wfilemanager-recovery-kit show or export to inspect or save the current kit.",
     ],
-    notes: [{ tone: "danger", title: "Keep the kit outside the VPS", body: "Without the Recovery Kit, a lost server cannot prove ownership of the managed instance, recover it or request remote deletion." }],
+    notes: [
+      {
+        tone: "danger",
+        title: "Keep the kit outside the VPS",
+        body: "Without the Recovery Kit, a lost server cannot prove ownership of the managed instance, recover it or request remote deletion.",
+      },
+    ],
   },
   {
     id: "updates",
@@ -275,7 +314,13 @@ const SECTIONS: DocSection[] = [
       "Do not expose the internal Node port; access the application through HTTPS and Nginx.",
       "Writes through symbolic-link path components and writes to /proc, /sys, /dev and /run are blocked by default.",
     ],
-    notes: [{ tone: "danger", title: "Elevated privileges", body: "wFileManager manages real server files. Incorrect administrator actions can cause permanent data loss or system compromise." }],
+    notes: [
+      {
+        tone: "danger",
+        title: "Elevated privileges",
+        body: "wFileManager manages real server files. Incorrect administrator actions can cause permanent data loss or system compromise.",
+      },
+    ],
   },
   {
     id: "troubleshooting",
@@ -293,7 +338,14 @@ const SECTIONS: DocSection[] = [
   },
 ];
 
-const CATEGORIES: Array<"All" | DocCategory> = ["All", "Basics", "Files", "Transfers", "Administration", "Safety"];
+const CATEGORIES: Array<"All" | DocCategory> = [
+  "All",
+  "Basics",
+  "Files",
+  "Transfers",
+  "Administration",
+  "Safety",
+];
 
 function noteClasses(tone: NoteTone) {
   if (tone === "danger") return "border-destructive/35 bg-destructive/10 text-destructive";
@@ -306,31 +358,89 @@ function Docs() {
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>("All");
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return SECTIONS.filter((section) =>
-      (category === "All" || section.category === category)
-      && (!needle || `${section.title} ${section.summary} ${section.details.join(" ")}`.toLowerCase().includes(needle)),
+    return SECTIONS.filter(
+      (section) =>
+        (category === "All" || section.category === category) &&
+        (!needle ||
+          `${section.title} ${section.summary} ${section.details.join(" ")}`
+            .toLowerCase()
+            .includes(needle)),
     );
   }, [category, query]);
 
   return (
     <div className="mx-auto w-full max-w-5xl p-6">
-      <div className="mb-6"><h1 className="text-xl font-semibold tracking-tight">Documentation</h1><p className="text-sm text-muted-foreground">Operational guidance for this wFileManager installation.</p></div>
+      <div className="mb-6">
+        <h1 className="text-xl font-semibold tracking-tight">Documentation</h1>
+        <p className="text-sm text-muted-foreground">
+          Operational guidance for this wFileManager installation.
+        </p>
+      </div>
       <div className="mb-4 flex flex-wrap gap-2">
-        <div className="relative min-w-[240px] flex-1"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search documentation…" className="pl-9" /></div>
-        {CATEGORIES.map((item) => <Button key={item} size="sm" variant={category === item ? "default" : "outline"} onClick={() => setCategory(item)}>{item}</Button>)}
+        <div className="relative min-w-[240px] flex-1">
+          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search documentation…"
+            className="pl-9"
+          />
+        </div>
+        {CATEGORIES.map((item) => (
+          <Button
+            key={item}
+            size="sm"
+            variant={category === item ? "default" : "outline"}
+            onClick={() => setCategory(item)}
+          >
+            {item}
+          </Button>
+        ))}
       </div>
       <Card className="p-4">
-        {filtered.length === 0 ? <div className="py-12 text-center text-sm text-muted-foreground">No documentation section matches this search.</div> : (
+        {filtered.length === 0 ? (
+          <div className="py-12 text-center text-sm text-muted-foreground">
+            No documentation section matches this search.
+          </div>
+        ) : (
           <Accordion type="multiple" className="w-full">
             {filtered.map((section) => {
               const Icon = section.icon;
               return (
                 <AccordionItem key={section.id} value={section.id}>
-                  <AccordionTrigger className="hover:no-underline"><div className="flex items-center gap-3 text-left"><Icon className="h-4 w-4 shrink-0 text-muted-foreground" /><div><div className="flex items-center gap-2"><span className="font-medium">{section.title}</span><Badge variant="outline" className="text-[10px]">{section.category}</Badge></div><p className="mt-0.5 text-xs font-normal text-muted-foreground">{section.summary}</p></div></div></AccordionTrigger>
+                  <AccordionTrigger className="hover:no-underline">
+                    <div className="flex items-center gap-3 text-left">
+                      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{section.title}</span>
+                          <Badge variant="outline" className="text-[10px]">
+                            {section.category}
+                          </Badge>
+                        </div>
+                        <p className="mt-0.5 text-xs font-normal text-muted-foreground">
+                          {section.summary}
+                        </p>
+                      </div>
+                    </div>
+                  </AccordionTrigger>
                   <AccordionContent className="space-y-3 pl-7">
-                    <ul className="list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">{section.details.map((detail) => <li key={detail}>{detail}</li>)}</ul>
-                    {section.notes?.map((note) => <Alert key={note.title} className={noteClasses(note.tone)}><AlertTitle>{note.title}</AlertTitle><AlertDescription>{note.body}</AlertDescription></Alert>)}
-                    {section.route && <Button asChild size="sm" variant="outline"><Link to={section.route}>Open {section.title}</Link></Button>}
+                    <ul className="list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
+                      {section.details.map((detail) => (
+                        <li key={detail}>{detail}</li>
+                      ))}
+                    </ul>
+                    {section.notes?.map((note) => (
+                      <Alert key={note.title} className={noteClasses(note.tone)}>
+                        <AlertTitle>{note.title}</AlertTitle>
+                        <AlertDescription>{note.body}</AlertDescription>
+                      </Alert>
+                    ))}
+                    {section.route && (
+                      <Button asChild size="sm" variant="outline">
+                        <Link to={section.route}>Open {section.title}</Link>
+                      </Button>
+                    )}
                   </AccordionContent>
                 </AccordionItem>
               );

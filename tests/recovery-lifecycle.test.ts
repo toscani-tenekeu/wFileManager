@@ -46,9 +46,7 @@ describe("Pro managed application-data billing lifecycle", () => {
 
   test("does not create inactivity warning notifications or email jobs", async () => {
     const migration = (
-      await source(
-        "supabase/migrations/20260724213000_wfilemanager_pro_billing_enforcement.sql",
-      )
+      await source("supabase/migrations/20260724213000_wfilemanager_pro_billing_enforcement.sql")
     ).toLowerCase();
 
     expect(migration).not.toContain("insert into public.wfilemanager_notifications");

@@ -3,15 +3,17 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "content-type, x-wfilemanager-instance, x-wfilemanager-instance-secret, x-wfilemanager-recovery-key, x-wfilemanager-root-token",
+  "Access-Control-Allow-Headers":
+    "content-type, x-wfilemanager-instance, x-wfilemanager-instance-secret, x-wfilemanager-recovery-key, x-wfilemanager-root-token",
   "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
   "Cache-Control": "no-store",
 };
 
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
-  status,
-  headers: { ...cors, "Content-Type": "application/json" },
-});
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...cors, "Content-Type": "application/json" },
+  });
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -47,7 +49,9 @@ type Authorization = {
 };
 
 function hex(bytes: Uint8Array) {
-  return Array.from(bytes).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return Array.from(bytes)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 async function sha256(value: string) {
@@ -64,35 +68,31 @@ function safeEqual(left: string, right: string) {
 }
 
 function instanceKeyFrom(request: Request, body: Record<string, unknown>) {
-  return String(
-    request.headers.get("x-wfilemanager-instance")
-      || body.instanceKey
-      || "",
-  ).trim();
+  return String(request.headers.get("x-wfilemanager-instance") || body.instanceKey || "").trim();
 }
 
 function recoveryKeyFrom(request: Request, body: Record<string, unknown>) {
   return String(
-    request.headers.get("x-wfilemanager-recovery-key")
-      || request.headers.get("x-wfilemanager-root-token")
-      || body.recoveryKey
-      || "",
+    request.headers.get("x-wfilemanager-recovery-key") ||
+      request.headers.get("x-wfilemanager-root-token") ||
+      body.recoveryKey ||
+      "",
   ).trim();
 }
 
 function instanceSecretFrom(request: Request, body: Record<string, unknown>) {
   return String(
-    request.headers.get("x-wfilemanager-instance-secret")
-      || body.instanceSecret
-      || "",
+    request.headers.get("x-wfilemanager-instance-secret") || body.instanceSecret || "",
   ).trim();
 }
 
 function isSuspendedForBilling(instance: InstanceRecord) {
-  return instance.subscription_status === "suspended"
-    || instance.subscription_status === "expired"
-    || instance.data_status === "suspended"
-    || instance.data_status === "deleted";
+  return (
+    instance.subscription_status === "suspended" ||
+    instance.subscription_status === "expired" ||
+    instance.data_status === "suspended" ||
+    instance.data_status === "deleted"
+  );
 }
 
 function isInGrace(instance: InstanceRecord) {
@@ -103,14 +103,19 @@ async function loadInstance(instanceKey: string) {
   if (!instanceKey) return null;
   const { data: instance, error } = await supabase
     .from("wfilemanager_instances")
-    .select("id,instance_key,name,hostname,base_url,status,service_plan,subscription_status,data_status,paid_until,past_due_at,suspended_at,last_seen_at,frozen_at,delete_after_at,recovered_at")
+    .select(
+      "id,instance_key,name,hostname,base_url,status,service_plan,subscription_status,data_status,paid_until,past_due_at,suspended_at,last_seen_at,frozen_at,delete_after_at,recovered_at",
+    )
     .eq("instance_key", instanceKey)
     .maybeSingle<InstanceRecord>();
   if (error || !instance) return null;
   return instance;
 }
 
-async function authorizeRecovery(instanceKey: string, recoveryKey: string): Promise<Authorization | null> {
+async function authorizeRecovery(
+  instanceKey: string,
+  recoveryKey: string,
+): Promise<Authorization | null> {
   if (!instanceKey || !recoveryKey) return null;
   const instance = await loadInstance(instanceKey);
   if (!instance) return null;
@@ -128,7 +133,11 @@ async function authorizeRecovery(instanceKey: string, recoveryKey: string): Prom
   return { instance, method: "recovery" };
 }
 
-async function authorizeHeartbeat(instanceKey: string, instanceSecret: string, legacyRecoveryKey: string): Promise<Authorization | null> {
+async function authorizeHeartbeat(
+  instanceKey: string,
+  instanceSecret: string,
+  legacyRecoveryKey: string,
+): Promise<Authorization | null> {
   const instance = await loadInstance(instanceKey);
   if (!instance) return null;
 
@@ -176,16 +185,17 @@ async function upsertHeartbeatCredential(instanceId: string, secretHash: string,
   if (!/^[0-9a-f]{64}$/.test(secretHash)) {
     throw new Error("A valid replacement heartbeat-secret hash is required");
   }
-  const { error } = await supabase
-    .from("wfilemanager_instance_credentials")
-    .upsert({
+  const { error } = await supabase.from("wfilemanager_instance_credentials").upsert(
+    {
       instance_id: instanceId,
       credential_type: "heartbeat",
       secret_hash: secretHash,
       revoked_at: null,
       last_used_at: null,
       updated_at: now,
-    }, { onConflict: "instance_id,credential_type" });
+    },
+    { onConflict: "instance_id,credential_type" },
+  );
   if (error) throw error;
 }
 
@@ -195,9 +205,10 @@ Deno.serve(async (request: Request) => {
   try {
     const url = new URL(request.url);
     const action = url.pathname.split("/").filter(Boolean).pop() || "status";
-    const body = request.method === "GET"
-      ? {}
-      : await request.json().catch(() => ({})) as Record<string, unknown>;
+    const body =
+      request.method === "GET"
+        ? {}
+        : ((await request.json().catch(() => ({}))) as Record<string, unknown>);
     const instanceKey = instanceKeyFrom(request, body);
     const recoveryKey = recoveryKeyFrom(request, body);
     const instanceSecret = instanceSecretFrom(request, body);
@@ -221,8 +232,9 @@ Deno.serve(async (request: Request) => {
     if (action === "heartbeat") {
       authorized = await authorizeHeartbeat(instanceKey, instanceSecret, recoveryKey);
     } else if (action === "status") {
-      authorized = await authorizeRecovery(instanceKey, recoveryKey)
-        || await authorizeHeartbeat(instanceKey, instanceSecret, recoveryKey);
+      authorized =
+        (await authorizeRecovery(instanceKey, recoveryKey)) ||
+        (await authorizeHeartbeat(instanceKey, instanceSecret, recoveryKey));
     } else {
       authorized = await authorizeRecovery(instanceKey, recoveryKey);
     }
@@ -258,7 +270,8 @@ Deno.serve(async (request: Request) => {
       if (hostname) update.hostname = hostname;
 
       if (!isSuspendedForBilling(authorized.instance)) {
-        update.status = authorized.instance.status === "frozen" ? "active" : authorized.instance.status;
+        update.status =
+          authorized.instance.status === "frozen" ? "active" : authorized.instance.status;
         update.frozen_at = null;
         if (authorized.instance.status === "frozen") update.recovered_at = now;
       }
@@ -274,14 +287,17 @@ Deno.serve(async (request: Request) => {
       }
 
       if (isSuspendedForBilling(authorized.instance)) {
-        return json({
-          success: false,
-          status: authorized.instance.status,
-          subscriptionStatus: authorized.instance.subscription_status,
-          dataStatus: authorized.instance.data_status,
-          paymentRequired: true,
-          deleteAfterAt: authorized.instance.delete_after_at,
-        }, 402);
+        return json(
+          {
+            success: false,
+            status: authorized.instance.status,
+            subscriptionStatus: authorized.instance.subscription_status,
+            dataStatus: authorized.instance.data_status,
+            paymentRequired: true,
+            deleteAfterAt: authorized.instance.delete_after_at,
+          },
+          402,
+        );
       }
 
       return json({
@@ -298,15 +314,23 @@ Deno.serve(async (request: Request) => {
     if (action === "recover") {
       if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
       if (isSuspendedForBilling(authorized.instance)) {
-        return json({
-          error: "This Pro subscription is suspended or expired. Payment must be restored before recovery.",
-          paymentRequired: true,
-          deleteAfterAt: authorized.instance.delete_after_at,
-        }, 402);
+        return json(
+          {
+            error:
+              "This Pro subscription is suspended or expired. Payment must be restored before recovery.",
+            paymentRequired: true,
+            deleteAfterAt: authorized.instance.delete_after_at,
+          },
+          402,
+        );
       }
 
-      const newRecoveryTokenHash = String(body.newRecoveryTokenHash || "").trim().toLowerCase();
-      const newInstanceSecretHash = String(body.newInstanceSecretHash || "").trim().toLowerCase();
+      const newRecoveryTokenHash = String(body.newRecoveryTokenHash || "")
+        .trim()
+        .toLowerCase();
+      const newInstanceSecretHash = String(body.newInstanceSecretHash || "")
+        .trim()
+        .toLowerCase();
       if (!/^[0-9a-f]{64}$/.test(newRecoveryTokenHash)) {
         return json({ error: "A valid replacement recovery-token hash is required" }, 400);
       }

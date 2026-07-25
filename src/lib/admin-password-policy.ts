@@ -3,7 +3,8 @@ export const ADMIN_PASSWORD_POLICY_TEXT =
 
 export function administratorPasswordError(password: string): string | null {
   if (password.length < 12) return "Use at least 12 characters.";
-  if (!/^[A-Za-z0-9]+$/.test(password)) return "Use letters and numbers only; special characters are not allowed.";
+  if (!/^[A-Za-z0-9]+$/.test(password))
+    return "Use letters and numbers only; special characters are not allowed.";
   if (!/[A-Z]/.test(password)) return "Add at least one uppercase letter.";
   if (!/[a-z]/.test(password)) return "Add at least one lowercase letter.";
   if (!/[0-9]/.test(password)) return "Add at least one number.";

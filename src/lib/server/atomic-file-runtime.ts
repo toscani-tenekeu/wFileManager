@@ -6,9 +6,14 @@ import { assertSafeExistingMutation } from "@/lib/server/safe-path-runtime";
 
 const MAX_TEXT_BYTES = Number(process.env.WFILEMANAGER_MAX_TEXT_BYTES || 5 * 1024 * 1024);
 
-export async function saveTextFileAtomic(inputPath: unknown, content: unknown, expectedModifiedAt?: unknown) {
+export async function saveTextFileAtomic(
+  inputPath: unknown,
+  content: unknown,
+  expectedModifiedAt?: unknown,
+) {
   if (typeof content !== "string") throw new LocalApiError(400, "File content must be text");
-  if (Buffer.byteLength(content) > MAX_TEXT_BYTES) throw new LocalApiError(413, "Content is too large");
+  if (Buffer.byteLength(content) > MAX_TEXT_BYTES)
+    throw new LocalApiError(413, "Content is too large");
 
   const target = await assertSafeExistingMutation(inputPath);
   const current = await stat(target);
@@ -17,11 +22,17 @@ export async function saveTextFileAtomic(inputPath: unknown, content: unknown, e
   if (typeof expectedModifiedAt === "string" && expectedModifiedAt) {
     const expected = new Date(expectedModifiedAt).getTime();
     if (!Number.isFinite(expected) || Math.abs(current.mtimeMs - expected) > 1) {
-      throw new LocalApiError(409, "The file changed after it was opened. Reload it before saving to avoid overwriting another change.");
+      throw new LocalApiError(
+        409,
+        "The file changed after it was opened. Reload it before saving to avoid overwriting another change.",
+      );
     }
   }
 
-  const temporary = path.join(path.dirname(target), `.${path.basename(target)}.wfilemanager-${crypto.randomUUID()}.tmp`);
+  const temporary = path.join(
+    path.dirname(target),
+    `.${path.basename(target)}.wfilemanager-${crypto.randomUUID()}.tmp`,
+  );
   let handle: Awaited<ReturnType<typeof open>> | null = null;
   try {
     handle = await open(temporary, "wx", 0o600);
@@ -34,7 +45,11 @@ export async function saveTextFileAtomic(inputPath: unknown, content: unknown, e
 
     const directory = await open(path.dirname(target), "r").catch(() => null);
     if (directory) {
-      try { await directory.sync(); } finally { await directory.close(); }
+      try {
+        await directory.sync();
+      } finally {
+        await directory.close();
+      }
     }
   } catch (error) {
     if (handle) await handle.close().catch(() => undefined);

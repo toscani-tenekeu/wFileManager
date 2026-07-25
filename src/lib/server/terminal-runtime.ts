@@ -22,13 +22,23 @@ type RuntimeState = typeof globalThis & {
 };
 
 const runtime = globalThis as RuntimeState;
-const sessions = runtime.__wfilemanagerAdminPtySessions ??= new Map<string, PtySession>();
-const MAX_SESSIONS_PER_ADMIN = Math.max(1, Number(process.env.WFILEMANAGER_MAX_TERMINAL_SESSIONS || 5));
-const MAX_OUTPUT_CHUNKS = Math.max(500, Number(process.env.WFILEMANAGER_TERMINAL_OUTPUT_CHUNKS || 4000));
-const IDLE_TIMEOUT_MS = Math.max(5 * 60_000, Number(process.env.WFILEMANAGER_TERMINAL_IDLE_TIMEOUT_MS || 30 * 60_000));
+const sessions = (runtime.__wfilemanagerAdminPtySessions ??= new Map<string, PtySession>());
+const MAX_SESSIONS_PER_ADMIN = Math.max(
+  1,
+  Number(process.env.WFILEMANAGER_MAX_TERMINAL_SESSIONS || 5),
+);
+const MAX_OUTPUT_CHUNKS = Math.max(
+  500,
+  Number(process.env.WFILEMANAGER_TERMINAL_OUTPUT_CHUNKS || 4000),
+);
+const IDLE_TIMEOUT_MS = Math.max(
+  5 * 60_000,
+  Number(process.env.WFILEMANAGER_TERMINAL_IDLE_TIMEOUT_MS || 30 * 60_000),
+);
 
 function assertAdministrator(user: LocalUser) {
-  if (!user.isAdmin) throw new LocalApiError(403, "Administrator access is required for the terminal");
+  if (!user.isAdmin)
+    throw new LocalApiError(403, "Administrator access is required for the terminal");
 }
 
 function normalizeCwd(input: unknown) {
@@ -40,14 +50,17 @@ function normalizeCwd(input: unknown) {
 function ownedSession(ownerUserId: string, idInput: unknown) {
   const id = String(idInput || "");
   const session = sessions.get(id);
-  if (!session || session.ownerUserId !== ownerUserId) throw new LocalApiError(404, "Terminal session not found");
+  if (!session || session.ownerUserId !== ownerUserId)
+    throw new LocalApiError(404, "Terminal session not found");
   session.lastSeenAt = Date.now();
   return session;
 }
 
 function processEnvironment(user: LocalUser) {
   const environment = Object.fromEntries(
-    Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+    Object.entries(process.env).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
   );
   return {
     ...environment,
@@ -67,11 +80,21 @@ export function terminalIdentity(user: LocalUser) {
   return { linuxUsername: "root", home: "/root", uid: 0, gid: 0, sudo: true };
 }
 
-export async function createRootPtySession(user: LocalUser, cwdInput: unknown, colsInput: unknown, rowsInput: unknown) {
+export async function createRootPtySession(
+  user: LocalUser,
+  cwdInput: unknown,
+  colsInput: unknown,
+  rowsInput: unknown,
+) {
   assertAdministrator(user);
-  const openSessions = [...sessions.values()].filter((session) => session.ownerUserId === user.id && !session.exited);
+  const openSessions = [...sessions.values()].filter(
+    (session) => session.ownerUserId === user.id && !session.exited,
+  );
   if (openSessions.length >= MAX_SESSIONS_PER_ADMIN) {
-    throw new LocalApiError(429, `A maximum of ${MAX_SESSIONS_PER_ADMIN} terminal sessions may be open at once`);
+    throw new LocalApiError(
+      429,
+      `A maximum of ${MAX_SESSIONS_PER_ADMIN} terminal sessions may be open at once`,
+    );
   }
 
   let cwd = normalizeCwd(cwdInput);
@@ -112,7 +135,10 @@ export async function createRootPtySession(user: LocalUser, cwdInput: unknown, c
     session.exited = true;
     session.exitCode = exitCode;
     session.signal = signal ?? null;
-    session.chunks.push({ sequence: session.nextSequence++, data: `\r\n[Process exited with code ${exitCode}]\r\n` });
+    session.chunks.push({
+      sequence: session.nextSequence++,
+      data: `\r\n[Process exited with code ${exitCode}]\r\n`,
+    });
   });
   sessions.set(id, session);
   return { sessionId: id, mode: "root" as const, linuxUsername: "root", home: "/root" };
@@ -122,12 +148,18 @@ export function writePty(ownerUserId: string, idInput: unknown, dataInput: unkno
   const session = ownedSession(ownerUserId, idInput);
   if (session.exited) throw new LocalApiError(409, "Terminal process has exited");
   if (typeof dataInput !== "string") throw new LocalApiError(400, "Terminal input must be text");
-  if (Buffer.byteLength(dataInput, "utf8") > 64 * 1024) throw new LocalApiError(413, "Terminal input is too large");
+  if (Buffer.byteLength(dataInput, "utf8") > 64 * 1024)
+    throw new LocalApiError(413, "Terminal input is too large");
   session.process.write(dataInput);
   return { success: true as const };
 }
 
-export function resizePty(ownerUserId: string, idInput: unknown, colsInput: unknown, rowsInput: unknown) {
+export function resizePty(
+  ownerUserId: string,
+  idInput: unknown,
+  colsInput: unknown,
+  rowsInput: unknown,
+) {
   const session = ownedSession(ownerUserId, idInput);
   const cols = Math.max(20, Math.min(400, Number(colsInput) || 120));
   const rows = Math.max(5, Math.min(200, Number(rowsInput) || 32));

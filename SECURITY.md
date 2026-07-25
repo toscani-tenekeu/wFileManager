@@ -4,12 +4,12 @@ wFileManager is a privileged Linux administration application. A successful expl
 
 ## Supported versions
 
-| Version | Support |
-| --- | --- |
-| Latest stable | Supported |
+| Version         | Support                       |
+| --------------- | ----------------------------- |
+| Latest stable   | Supported                     |
 | Previous stable | Critical fixes when practical |
-| Older versions | Not supported |
-| `main` | Development only |
+| Older versions  | Not supported                 |
+| `main`          | Development only              |
 
 Install stable security updates promptly.
 

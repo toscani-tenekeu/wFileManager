@@ -141,7 +141,9 @@ export const DEMO_ROLES: DemoRole[] = [
     description: "Manage files across permitted paths without user or role administration.",
     builtin: true,
     members: 1,
-    permissions: PERMISSION_KEYS.filter((permission) => !["manage_users", "manage_roles"].includes(permission)),
+    permissions: PERMISSION_KEYS.filter(
+      (permission) => !["manage_users", "manage_roles"].includes(permission),
+    ),
   },
   {
     id: "r_editor",
@@ -193,15 +195,65 @@ export interface ActivityEvent {
 }
 
 const actions: Array<Omit<ActivityEvent, "id" | "time">> = [
-  { user: "admin", action: "Signed in", category: "auth", ip: "192.168.1.20", device: "Firefox on Ubuntu", result: "success" },
-  { user: "dana", action: "Edited file", category: "file", target: "/etc/nginx/nginx.conf", result: "success", ip: "192.168.1.21" },
-  { user: "chris", action: "Uploaded file", category: "file", target: "/var/www/example.com/uploads/brochure.pdf", result: "success" },
-  { user: "diego", action: "Failed sign in", category: "auth", ip: "203.0.113.44", result: "failure" },
-  { user: "admin", action: "Changed permissions", category: "permission", target: "/var/www/example.com", result: "success" },
-  { user: "dana", action: "Extracted archive", category: "archive", target: "/tmp/release-1.4.2.tar.gz", result: "success" },
+  {
+    user: "admin",
+    action: "Signed in",
+    category: "auth",
+    ip: "192.168.1.20",
+    device: "Firefox on Ubuntu",
+    result: "success",
+  },
+  {
+    user: "dana",
+    action: "Edited file",
+    category: "file",
+    target: "/etc/nginx/nginx.conf",
+    result: "success",
+    ip: "192.168.1.21",
+  },
+  {
+    user: "chris",
+    action: "Uploaded file",
+    category: "file",
+    target: "/var/www/example.com/uploads/brochure.pdf",
+    result: "success",
+  },
+  {
+    user: "diego",
+    action: "Failed sign in",
+    category: "auth",
+    ip: "203.0.113.44",
+    result: "failure",
+  },
+  {
+    user: "admin",
+    action: "Changed permissions",
+    category: "permission",
+    target: "/var/www/example.com",
+    result: "success",
+  },
+  {
+    user: "dana",
+    action: "Extracted archive",
+    category: "archive",
+    target: "/tmp/release-1.4.2.tar.gz",
+    result: "success",
+  },
   { user: "admin", action: "Created user", category: "user", target: "priya", result: "success" },
-  { user: "admin", action: "Opened administrator terminal", category: "terminal", target: "/root", result: "success" },
-  { user: "chris", action: "Moved to trash", category: "file", target: "/var/www/example.com/uploads/old-banner.png", result: "success" },
+  {
+    user: "admin",
+    action: "Opened administrator terminal",
+    category: "terminal",
+    target: "/root",
+    result: "success",
+  },
+  {
+    user: "chris",
+    action: "Moved to trash",
+    category: "file",
+    target: "/var/www/example.com/uploads/old-banner.png",
+    result: "success",
+  },
   { user: "admin", action: "Emptied trash", category: "file", result: "warning" },
 ];
 

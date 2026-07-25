@@ -7,13 +7,31 @@ import { LocalApiError, normalizeServerPath } from "@/lib/server/local-runtime";
 function mimeFor(filePath: string) {
   const ext = path.extname(filePath).toLowerCase();
   const map: Record<string, string> = {
-    ".txt": "text/plain", ".log": "text/plain", ".conf": "text/plain", ".ini": "text/plain",
-    ".md": "text/markdown", ".json": "application/json", ".yaml": "application/yaml",
-    ".yml": "application/yaml", ".xml": "application/xml", ".csv": "text/csv",
-    ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".ts": "text/typescript",
-    ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-    ".webp": "image/webp", ".gif": "image/gif", ".pdf": "application/pdf", ".zip": "application/zip",
-    ".gz": "application/gzip", ".mp3": "audio/mpeg", ".mp4": "video/mp4",
+    ".txt": "text/plain",
+    ".log": "text/plain",
+    ".conf": "text/plain",
+    ".ini": "text/plain",
+    ".md": "text/markdown",
+    ".json": "application/json",
+    ".yaml": "application/yaml",
+    ".yml": "application/yaml",
+    ".xml": "application/xml",
+    ".csv": "text/csv",
+    ".html": "text/html",
+    ".css": "text/css",
+    ".js": "text/javascript",
+    ".ts": "text/typescript",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".pdf": "application/pdf",
+    ".zip": "application/zip",
+    ".gz": "application/gzip",
+    ".mp3": "audio/mpeg",
+    ".mp4": "video/mp4",
   };
   return map[ext] || "application/octet-stream";
 }
@@ -32,7 +50,8 @@ function rangeFor(header: string | null, size: number) {
     if (!Number.isFinite(start)) start = 0;
     if (!Number.isFinite(end)) end = size - 1;
   }
-  if (start < 0 || end < start || start >= size) throw new LocalApiError(416, "Requested byte range is outside the file");
+  if (start < 0 || end < start || start >= size)
+    throw new LocalApiError(416, "Requested byte range is outside the file");
   return { start, end: Math.min(size - 1, end) };
 }
 
@@ -45,7 +64,9 @@ export async function streamedDownloadResponse(request: Request, inputPath: unkn
   const start = requestedRange?.start ?? 0;
   const end = requestedRange?.end ?? Math.max(0, info.size - 1);
   const length = info.size === 0 ? 0 : end - start + 1;
-  const stream = Readable.toWeb(createReadStream(target, requestedRange ? { start, end } : undefined)) as ReadableStream;
+  const stream = Readable.toWeb(
+    createReadStream(target, requestedRange ? { start, end } : undefined),
+  ) as ReadableStream;
   const headers = new Headers({
     "Content-Type": mimeFor(target),
     "Content-Length": String(length),

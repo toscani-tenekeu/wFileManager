@@ -19,7 +19,12 @@ async function timed(name: string, operation: () => Promise<string>): Promise<He
     const message = await operation();
     return { name, ok: true, message, durationMs: Date.now() - started };
   } catch (error) {
-    return { name, ok: false, message: error instanceof Error ? error.message : "Health check failed", durationMs: Date.now() - started };
+    return {
+      name,
+      ok: false,
+      message: error instanceof Error ? error.message : "Health check failed",
+      durationMs: Date.now() - started,
+    };
   }
 }
 
@@ -52,8 +57,12 @@ async function filesystemCheck() {
 
 async function applicationCheck() {
   const packagePath = path.join(process.cwd(), "package.json");
-  const packageJson = JSON.parse(await readFile(packagePath, "utf8")) as { name?: string; version?: string };
-  if (packageJson.name !== "wfilemanager" || !packageJson.version) throw new Error("Application release metadata is invalid");
+  const packageJson = JSON.parse(await readFile(packagePath, "utf8")) as {
+    name?: string;
+    version?: string;
+  };
+  if (packageJson.name !== "wfilemanager" || !packageJson.version)
+    throw new Error("Application release metadata is invalid");
   return `wFileManager ${packageJson.version} is loaded`;
 }
 
@@ -63,9 +72,10 @@ export async function healthSummary(scope?: string | null) {
     database: () => timed("database", databaseCheck),
     filesystem: () => timed("filesystem", filesystemCheck),
   };
-  const selected = scope && scope in available
-    ? [await available[scope as keyof typeof available]()]
-    : await Promise.all(Object.values(available).map((check) => check()));
+  const selected =
+    scope && scope in available
+      ? [await available[scope as keyof typeof available]()]
+      : await Promise.all(Object.values(available).map((check) => check()));
   const ok = selected.every((check) => check.ok);
   return {
     ok,

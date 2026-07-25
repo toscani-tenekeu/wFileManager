@@ -1,6 +1,20 @@
 import crypto from "node:crypto";
 import path from "node:path";
-import { copyFile, lstat, mkdir, readFile, readdir, readlink, rename, rm, symlink, unlink, writeFile, chmod, rmdir } from "node:fs/promises";
+import {
+  copyFile,
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  readlink,
+  rename,
+  rm,
+  symlink,
+  unlink,
+  writeFile,
+  chmod,
+  rmdir,
+} from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import { LocalApiError } from "@/lib/server/local-runtime";
 
@@ -9,7 +23,8 @@ const JOBS_FILE = path.join(STATE_ROOT, "operation-jobs.json");
 const TERMINAL_RETENTION_MS = 24 * 60 * 60 * 1000;
 
 type OperationName = "copy" | "move" | "delete";
-type OperationStatus = "queued" | "running" | "cancelling" | "cancelled" | "completed" | "failed" | "interrupted";
+type OperationStatus =
+  "queued" | "running" | "cancelling" | "cancelled" | "completed" | "failed" | "interrupted";
 
 type TreeItem = {
   source: string;
@@ -45,7 +60,14 @@ let initialized: Promise<void> | null = null;
 let persistQueue = Promise.resolve();
 
 function publicJob(job: PersistentOperationJob) {
-  const { ownerUserId: _ownerUserId, source: _source, destinationDirectory: _destinationDirectory, createdAt: _createdAt, updatedAt: _updatedAt, ...value } = job;
+  const {
+    ownerUserId: _ownerUserId,
+    source: _source,
+    destinationDirectory: _destinationDirectory,
+    createdAt: _createdAt,
+    updatedAt: _updatedAt,
+    ...value
+  } = job;
   return value;
 }
 
@@ -54,7 +76,8 @@ function updateProgress(job: PersistentOperationJob, patch: Partial<PersistentOp
   const numerator = job.totalBytes > 0 ? job.processedBytes : job.processedItems;
   const denominator = job.totalBytes > 0 ? job.totalBytes : job.totalItems;
   if (!["completed", "cancelled"].includes(job.status)) {
-    job.progress = denominator > 0 ? Math.max(0, Math.min(99, Math.round((numerator / denominator) * 100))) : 0;
+    job.progress =
+      denominator > 0 ? Math.max(0, Math.min(99, Math.round((numerator / denominator) * 100))) : 0;
   }
 }
 
@@ -75,7 +98,9 @@ async function initialize() {
   if (initialized) return initialized;
   initialized = (async () => {
     await mkdir(STATE_ROOT, { recursive: true, mode: 0o700 });
-    const stored = await readFile(JOBS_FILE, "utf8").then((value) => JSON.parse(value) as PersistentOperationJob[]).catch(() => []);
+    const stored = await readFile(JOBS_FILE, "utf8")
+      .then((value) => JSON.parse(value) as PersistentOperationJob[])
+      .catch(() => []);
     const now = Date.now();
     for (const job of stored) {
       if (["queued", "running", "cancelling"].includes(job.status)) {
@@ -83,7 +108,11 @@ async function initialize() {
         job.error = "The application restarted before this operation completed";
         job.updatedAt = now;
       }
-      if (now - job.updatedAt <= TERMINAL_RETENTION_MS || !["completed", "failed", "cancelled", "interrupted"].includes(job.status)) jobs.set(job.id, job);
+      if (
+        now - job.updatedAt <= TERMINAL_RETENTION_MS ||
+        !["completed", "failed", "cancelled", "interrupted"].includes(job.status)
+      )
+        jobs.set(job.id, job);
     }
     await persist();
   })();
@@ -112,7 +141,8 @@ async function scanTree(root: string) {
     if (itemKind === "symlink") item.linkTarget = await readlink(target);
     entries.push(item);
     if (itemKind === "directory") {
-      for (const name of await readdir(target)) await visit(path.join(target, name), path.join(relative, name));
+      for (const name of await readdir(target))
+        await visit(path.join(target, name), path.join(relative, name));
     }
   }
   await visit(root, "");
@@ -121,7 +151,12 @@ async function scanTree(root: string) {
 
 function throwIfCancelled(job: PersistentOperationJob) {
   if (!cancellation.has(job.id)) return;
-  updateProgress(job, { status: "cancelled", error: "Operation cancelled", currentItem: undefined, progress: 100 });
+  updateProgress(job, {
+    status: "cancelled",
+    error: "Operation cancelled",
+    currentItem: undefined,
+    progress: 100,
+  });
   throw new LocalApiError(499, "Operation cancelled");
 }
 
@@ -141,9 +176,15 @@ async function copyTree(source: string, destination: string, job: PersistentOper
       await chmod(target, item.mode).catch(() => undefined);
     } else if (item.kind === "symlink") await symlink(item.linkTarget || "", target);
     else throw new LocalApiError(415, `Unsupported filesystem entry: ${item.source}`);
-    updateProgress(job, { processedItems: job.processedItems + 1, processedBytes: job.processedBytes + item.size });
+    updateProgress(job, {
+      processedItems: job.processedItems + 1,
+      processedBytes: job.processedBytes + item.size,
+    });
     checkpoint += 1;
-    if (checkpoint >= 20) { checkpoint = 0; await persist(); }
+    if (checkpoint >= 20) {
+      checkpoint = 0;
+      await persist();
+    }
   }
   await persist();
 }
@@ -161,9 +202,16 @@ async function deleteTree(target: string, job: PersistentOperationJob, countProg
     job.currentItem = item.source;
     if (item.kind === "directory") await rmdir(item.source);
     else await unlink(item.source);
-    if (countProgress) updateProgress(job, { processedItems: job.processedItems + 1, processedBytes: job.processedBytes + item.size });
+    if (countProgress)
+      updateProgress(job, {
+        processedItems: job.processedItems + 1,
+        processedBytes: job.processedBytes + item.size,
+      });
     checkpoint += 1;
-    if (checkpoint >= 20) { checkpoint = 0; await persist(); }
+    if (checkpoint >= 20) {
+      checkpoint = 0;
+      await persist();
+    }
   }
 }
 
@@ -174,15 +222,27 @@ async function perform(job: PersistentOperationJob) {
   try {
     if (job.operation === "delete") {
       await deleteTree(job.source, job);
-      updateProgress(job, { status: "completed", progress: 100, result: { deleted: job.source }, currentItem: undefined });
+      updateProgress(job, {
+        status: "completed",
+        progress: 100,
+        result: { deleted: job.source },
+        currentItem: undefined,
+      });
       await persist();
       return;
     }
 
-    if (!job.destinationDirectory) throw new LocalApiError(400, "A destination directory is required");
+    if (!job.destinationDirectory)
+      throw new LocalApiError(400, "A destination directory is required");
     const destination = path.join(job.destinationDirectory, path.basename(job.source));
-    if (destination === job.source || destination.startsWith(`${job.source}${path.sep}`)) throw new LocalApiError(400, "The destination cannot be inside the source");
-    if (await lstat(destination).then(() => true).catch(() => false)) throw new LocalApiError(409, `Destination already exists: ${destination}`);
+    if (destination === job.source || destination.startsWith(`${job.source}${path.sep}`))
+      throw new LocalApiError(400, "The destination cannot be inside the source");
+    if (
+      await lstat(destination)
+        .then(() => true)
+        .catch(() => false)
+    )
+      throw new LocalApiError(409, `Destination already exists: ${destination}`);
 
     if (job.operation === "move") {
       try {
@@ -191,7 +251,14 @@ async function perform(job: PersistentOperationJob) {
         job.totalBytes = items.reduce((sum, item) => sum + item.size, 0);
         job.currentItem = job.source;
         await rename(job.source, destination);
-        updateProgress(job, { status: "completed", processedItems: job.totalItems, processedBytes: job.totalBytes, progress: 100, result: { source: job.source, destination }, currentItem: undefined });
+        updateProgress(job, {
+          status: "completed",
+          processedItems: job.totalItems,
+          processedBytes: job.totalBytes,
+          progress: 100,
+          result: { source: job.source, destination },
+          currentItem: undefined,
+        });
         await persist();
         return;
       } catch (error) {
@@ -205,21 +272,38 @@ async function perform(job: PersistentOperationJob) {
     throwIfCancelled(job);
     if (job.operation === "move") await deleteTree(job.source, job, false);
     partialDestination = null;
-    updateProgress(job, { status: "completed", progress: 100, result: { source: job.source, destination }, currentItem: undefined });
+    updateProgress(job, {
+      status: "completed",
+      progress: 100,
+      result: { source: job.source, destination },
+      currentItem: undefined,
+    });
     await persist();
   } catch (error) {
-    if (partialDestination) await rm(partialDestination, { recursive: true, force: true }).catch(() => undefined);
-    if (job.status !== "cancelled") updateProgress(job, { status: "failed", error: error instanceof Error ? error.message : "Operation failed", currentItem: undefined });
+    if (partialDestination)
+      await rm(partialDestination, { recursive: true, force: true }).catch(() => undefined);
+    if (job.status !== "cancelled")
+      updateProgress(job, {
+        status: "failed",
+        error: error instanceof Error ? error.message : "Operation failed",
+        currentItem: undefined,
+      });
     await persist();
   } finally {
     cancellation.delete(job.id);
   }
 }
 
-export async function startOperationJob(ownerUserId: string, operationInput: unknown, source: string, destinationDirectory?: string) {
+export async function startOperationJob(
+  ownerUserId: string,
+  operationInput: unknown,
+  source: string,
+  destinationDirectory?: string,
+) {
   await initialize();
   const operation = String(operationInput || "") as OperationName;
-  if (!["copy", "move", "delete"].includes(operation)) throw new LocalApiError(400, "Unsupported operation");
+  if (!["copy", "move", "delete"].includes(operation))
+    throw new LocalApiError(400, "Unsupported operation");
   const id = crypto.randomUUID();
   const job: PersistentOperationJob = {
     id,
@@ -253,7 +337,8 @@ export async function cancelOperationJob(ownerUserId: string, idInput: unknown) 
   await initialize();
   const job = jobs.get(String(idInput || ""));
   if (!job || job.ownerUserId !== ownerUserId) throw new LocalApiError(404, "Operation not found");
-  if (["completed", "failed", "cancelled", "interrupted"].includes(job.status)) return publicJob(job);
+  if (["completed", "failed", "cancelled", "interrupted"].includes(job.status))
+    return publicJob(job);
   cancellation.add(job.id);
   updateProgress(job, { status: "cancelling" });
   await persist();

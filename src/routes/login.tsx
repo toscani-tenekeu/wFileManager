@@ -31,7 +31,11 @@ function LoginPage() {
 
   return (
     <AuthShell title="Sign in" desc="Access your wFileManager administration panel.">
-      {err && <Alert variant="destructive" className="mb-4"><AlertDescription>{err}</AlertDescription></Alert>}
+      {err && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{err}</AlertDescription>
+        </Alert>
+      )}
       <form
         className="space-y-4"
         onSubmit={async (event) => {
@@ -40,13 +44,15 @@ function LoginPage() {
           setSubmitting(true);
           try {
             await auth.login(user, pass, remember);
-            await wfilemanagerApi.createNotification({
-              title: "Signed in",
-              message: `A new wFileManager session was started for ${user}.`,
-              tone: "info",
-              link: "/account",
-              source: "authentication",
-            }).catch(() => undefined);
+            await wfilemanagerApi
+              .createNotification({
+                title: "Signed in",
+                message: `A new wFileManager session was started for ${user}.`,
+                tone: "info",
+                link: "/account",
+                source: "authentication",
+              })
+              .catch(() => undefined);
             toast.success(`Welcome back, ${user}`);
             nav({ to: "/" });
           } catch (error) {
@@ -58,11 +64,22 @@ function LoginPage() {
       >
         <div className="grid gap-1.5">
           <Label htmlFor="user">Username or email</Label>
-          <Input id="user" autoFocus value={user} onChange={(event) => setUser(event.target.value)} />
+          <Input
+            id="user"
+            autoFocus
+            value={user}
+            onChange={(event) => setUser(event.target.value)}
+          />
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="pass">Password</Label>
-          <Input id="pass" type="password" value={pass} onChange={(event) => setPass(event.target.value)} placeholder="••••••••" />
+          <Input
+            id="pass"
+            type="password"
+            value={pass}
+            onChange={(event) => setPass(event.target.value)}
+            placeholder="••••••••"
+          />
         </div>
         <label className="flex items-center gap-2 text-sm">
           <Checkbox checked={remember} onCheckedChange={(value) => setRemember(!!value)} />

@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { wfilemanagerApi, type AuthUser, type SetupPayload } from "./wfilemanager-api";
 import { setupWFileManager } from "./setup-api";
 
@@ -17,13 +25,40 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 async function enrichUser(user: AuthUser) {
   try {
     const access = await wfilemanagerApi.rolePermissions();
-    return { ...user, roleId: access.roleId ?? user.roleId, roleName: access.roleName, permissions: access.permissions };
+    return {
+      ...user,
+      roleId: access.roleId ?? user.roleId,
+      roleName: access.roleName,
+      permissions: access.permissions,
+    };
   } catch {
-    return { ...user, permissions: user.isAdmin ? [
-      "browse", "view", "preview", "read", "create_files", "create_directories", "edit", "rename",
-      "copy", "move", "upload", "download", "compress", "extract", "delete", "restore",
-      "permanently_delete", "change_permissions", "manage_users", "manage_roles",
-    ] : user.permissions || [] };
+    return {
+      ...user,
+      permissions: user.isAdmin
+        ? [
+            "browse",
+            "view",
+            "preview",
+            "read",
+            "create_files",
+            "create_directories",
+            "edit",
+            "rename",
+            "copy",
+            "move",
+            "upload",
+            "download",
+            "compress",
+            "extract",
+            "delete",
+            "restore",
+            "permanently_delete",
+            "change_permissions",
+            "manage_users",
+            "manage_roles",
+          ]
+        : user.permissions || [],
+    };
   }
 }
 
@@ -60,27 +95,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
-  const value = useMemo<AuthContextValue>(() => ({
-    user,
-    loading,
-    configured,
-    refresh,
-    async login(login, password, remember) {
-      const result = await wfilemanagerApi.login(login, password, remember);
-      setUser(await enrichUser(result.user));
-      setConfigured(true);
-    },
-    async setup(payload) {
-      await setupWFileManager(payload);
-      const result = await wfilemanagerApi.login(payload.username, payload.password, true);
-      setUser(await enrichUser(result.user));
-      setConfigured(true);
-    },
-    async logout() {
-      try { await wfilemanagerApi.logout(); } catch { /* The gateway still clears invalid sessions. */ }
-      setUser(null);
-    },
-  }), [user, loading, configured, refresh]);
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      loading,
+      configured,
+      refresh,
+      async login(login, password, remember) {
+        const result = await wfilemanagerApi.login(login, password, remember);
+        setUser(await enrichUser(result.user));
+        setConfigured(true);
+      },
+      async setup(payload) {
+        await setupWFileManager(payload);
+        const result = await wfilemanagerApi.login(payload.username, payload.password, true);
+        setUser(await enrichUser(result.user));
+        setConfigured(true);
+      },
+      async logout() {
+        try {
+          await wfilemanagerApi.logout();
+        } catch {
+          /* The gateway still clears invalid sessions. */
+        }
+        setUser(null);
+      },
+    }),
+    [user, loading, configured, refresh],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

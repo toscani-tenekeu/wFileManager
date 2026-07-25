@@ -28,8 +28,9 @@ describe("filesystem mutation safety", () => {
     await writeFile(path.join(actual, "file.txt"), "safe");
     await symlink(actual, path.join(root, "linked"));
 
-    await expect(assertSafeExistingMutation(path.join(root, "linked", "file.txt")))
-      .rejects.toThrow("symbolic links");
+    await expect(assertSafeExistingMutation(path.join(root, "linked", "file.txt"))).rejects.toThrow(
+      "symbolic links",
+    );
   });
 
   test("never overwrites an existing upload destination", async () => {
@@ -79,7 +80,9 @@ describe("authentication protection", () => {
     limiter.recordLoginFailure(request, login);
     limiter.recordLoginFailure(request, login);
     limiter.recordLoginFailure(request, login);
-    expect(() => limiter.assertLoginAllowed(request, login)).toThrow("Too many failed sign-in attempts");
+    expect(() => limiter.assertLoginAllowed(request, login)).toThrow(
+      "Too many failed sign-in attempts",
+    );
   });
 });
 
@@ -92,7 +95,11 @@ describe("application health", () => {
     const result = await healthSummary();
 
     expect(result.ok).toBe(true);
-    expect(result.checks.map((check) => check.name).sort()).toEqual(["application", "database", "filesystem"]);
+    expect(result.checks.map((check) => check.name).sort()).toEqual([
+      "application",
+      "database",
+      "filesystem",
+    ]);
     expect(result.checks.every((check) => check.ok)).toBe(true);
   });
 });

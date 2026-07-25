@@ -51,7 +51,8 @@ function formatUpdatePhase(update: UpdateInfo | null, starting: boolean) {
 
 function formatUpdateMessage(update: UpdateInfo | null, starting: boolean) {
   if (isUpdateBlocking(update)) return update?.state.message || "The updater is running.";
-  if (update?.state.status === "failed") return update.state.error || update.state.message || "Update failed.";
+  if (update?.state.status === "failed")
+    return update.state.error || update.state.message || "Update failed.";
   if (starting) return "Waiting for the updater to report progress…";
   return update?.state.message || "The updater is preparing the verified release package.";
 }
@@ -66,7 +67,11 @@ function AppLayout() {
   }, [auth.loading, auth.user, auth.configured, navigate]);
 
   if (auth.loading || !auth.user) {
-    return <div className="grid min-h-screen place-items-center bg-background text-sm text-muted-foreground">Loading wFileManager…</div>;
+    return (
+      <div className="grid min-h-screen place-items-center bg-background text-sm text-muted-foreground">
+        Loading wFileManager…
+      </div>
+    );
   }
 
   return (
@@ -97,23 +102,27 @@ function UpdateGate({ isAdmin }: { isAdmin: boolean }) {
   const activeUpdate = isUpdateBlocking(update);
   const blocking = starting || activeUpdate;
 
-  const checkUpdates = useCallback(async (showError = false, allowPrompt = true) => {
-    if (!isAdmin) return null;
-    setChecking(true);
-    try {
-      const result = await localApi.updateInfo();
-      setUpdate(result);
-      if (allowPrompt && result.updateAvailable && !isUpdateBlocking(result)) {
-        setPromptOpen(true);
+  const checkUpdates = useCallback(
+    async (showError = false, allowPrompt = true) => {
+      if (!isAdmin) return null;
+      setChecking(true);
+      try {
+        const result = await localApi.updateInfo();
+        setUpdate(result);
+        if (allowPrompt && result.updateAvailable && !isUpdateBlocking(result)) {
+          setPromptOpen(true);
+        }
+        return result;
+      } catch (value) {
+        if (showError)
+          toast.error(value instanceof Error ? value.message : "Unable to check for updates");
+        return null;
+      } finally {
+        setChecking(false);
       }
-      return result;
-    } catch (value) {
-      if (showError) toast.error(value instanceof Error ? value.message : "Unable to check for updates");
-      return null;
-    } finally {
-      setChecking(false);
-    }
-  }, [isAdmin]);
+    },
+    [isAdmin],
+  );
 
   useEffect(() => {
     void checkUpdates(false, true);
@@ -121,7 +130,10 @@ function UpdateGate({ isAdmin }: { isAdmin: boolean }) {
 
   useEffect(() => {
     if (!blocking) return;
-    const timer = window.setInterval(() => void checkUpdates(false, false), UPDATE_CHECK_INTERVAL_MS);
+    const timer = window.setInterval(
+      () => void checkUpdates(false, false),
+      UPDATE_CHECK_INTERVAL_MS,
+    );
     return () => window.clearInterval(timer);
   }, [blocking, checkUpdates]);
 
@@ -146,7 +158,11 @@ function UpdateGate({ isAdmin }: { isAdmin: boolean }) {
     if (startingSince && Date.now() - startingSince > UPDATE_START_GRACE_MS) {
       setStarting(false);
       setStartingSince(null);
-      toast.error(update.state.message && update.state.message !== "No update is running" ? update.state.message : "No update is running.");
+      toast.error(
+        update.state.message && update.state.message !== "No update is running"
+          ? update.state.message
+          : "No update is running.",
+      );
     }
   }, [activeUpdate, starting, startingSince, update]);
 
@@ -156,7 +172,9 @@ function UpdateGate({ isAdmin }: { isAdmin: boolean }) {
     setPromptOpen(false);
     try {
       await localApi.installUpdate();
-      toast.success("Update started. The interface is locked until the update finishes or rolls back.");
+      toast.success(
+        "Update started. The interface is locked until the update finishes or rolls back.",
+      );
       await checkUpdates(false, false);
     } catch (value) {
       toast.error(value instanceof Error ? value.message : "Unable to start the update");
@@ -165,26 +183,40 @@ function UpdateGate({ isAdmin }: { isAdmin: boolean }) {
     }
   };
 
-  const progress = Math.min(100, Math.max(0, activeUpdate ? update?.state.progress ?? 0 : starting ? update?.state.progress || 5 : update?.state.progress ?? 0));
+  const progress = Math.min(
+    100,
+    Math.max(
+      0,
+      activeUpdate
+        ? (update?.state.progress ?? 0)
+        : starting
+          ? update?.state.progress || 5
+          : (update?.state.progress ?? 0),
+    ),
+  );
   const latestVersion = update?.latestVersion || "new stable version";
 
   return (
     <>
-      <Dialog open={promptOpen && Boolean(update?.updateAvailable) && !blocking} onOpenChange={setPromptOpen}>
+      <Dialog
+        open={promptOpen && Boolean(update?.updateAvailable) && !blocking}
+        onOpenChange={setPromptOpen}
+      >
         <DialogContent className="overflow-hidden border-border bg-background p-0 shadow-xl sm:max-w-[520px]">
           <div className="border-b border-border bg-muted/30 px-5 py-4">
             <div className="mb-3 flex items-center justify-between gap-3 pr-9">
               <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
                 Stable update
               </Badge>
-              <span className="font-mono text-xs text-muted-foreground">{update?.currentVersion} → {latestVersion}</span>
+              <span className="font-mono text-xs text-muted-foreground">
+                {update?.currentVersion} → {latestVersion}
+              </span>
             </div>
             <DialogHeader>
-              <DialogTitle className="text-base">
-                New wFileManager release available
-              </DialogTitle>
+              <DialogTitle className="text-base">New wFileManager release available</DialogTitle>
               <DialogDescription>
-                An administrator should install verified stable releases to keep the instance secure and current.
+                An administrator should install verified stable releases to keep the instance secure
+                and current.
               </DialogDescription>
             </DialogHeader>
           </div>
@@ -212,7 +244,9 @@ function UpdateGate({ isAdmin }: { isAdmin: boolean }) {
             <Alert className="border-amber-500/40 bg-amber-500/5">
               <ShieldAlert className="h-4 w-4 text-amber-500" />
               <AlertDescription className="text-sm">
-                During installation, the interface will be locked. The updater downloads, verifies, builds, switches releases, performs a health check and rolls back automatically if the new release is unhealthy.
+                During installation, the interface will be locked. The updater downloads, verifies,
+                builds, switches releases, performs a health check and rolls back automatically if
+                the new release is unhealthy.
               </AlertDescription>
             </Alert>
           </div>
@@ -221,8 +255,16 @@ function UpdateGate({ isAdmin }: { isAdmin: boolean }) {
             <Button type="button" variant="outline" onClick={() => setPromptOpen(false)}>
               Later
             </Button>
-            <Button type="button" onClick={() => void installUpdate()} disabled={starting || checking}>
-              {checking || starting ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+            <Button
+              type="button"
+              onClick={() => void installUpdate()}
+              disabled={starting || checking}
+            >
+              {checking || starting ? (
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-4 w-4" />
+              )}
               Install update
             </Button>
           </DialogFooter>
@@ -243,12 +285,15 @@ function UpdateGate({ isAdmin }: { isAdmin: boolean }) {
                 wFileManager update in progress
               </h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Do not use the file manager while the update is running. This prevents conflicting filesystem, session and terminal operations.
+                Do not use the file manager while the update is running. This prevents conflicting
+                filesystem, session and terminal operations.
               </p>
             </div>
             <div className="space-y-4 px-5 py-5">
               <div className="flex items-center justify-between gap-4 text-sm">
-                <span className="capitalize text-muted-foreground">{formatUpdatePhase(update, starting)}</span>
+                <span className="capitalize text-muted-foreground">
+                  {formatUpdatePhase(update, starting)}
+                </span>
                 <span className="font-mono text-xs text-muted-foreground">{progress}%</span>
               </div>
               <Progress value={progress} />

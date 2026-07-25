@@ -52,7 +52,8 @@ export interface ProgressState {
 export interface OperationJob {
   id: string;
   operation: "copy" | "move" | "delete";
-  status: "queued" | "running" | "cancelling" | "cancelled" | "completed" | "failed" | "interrupted";
+  status:
+    "queued" | "running" | "cancelling" | "cancelled" | "completed" | "failed" | "interrupted";
   progress: number;
   processedBytes: number;
   totalBytes: number;
@@ -88,7 +89,13 @@ export interface FileManagerOverview {
   node: string;
   loginUsers: number;
   root: { path: string; entries: number | null; readable: boolean; writable: boolean };
-  locations: Array<{ path: string; exists: boolean; readable: boolean; writable: boolean; entries: number | null }>;
+  locations: Array<{
+    path: string;
+    exists: boolean;
+    readable: boolean;
+    writable: boolean;
+    entries: number | null;
+  }>;
   availableLocations: number;
   writableLocations: number;
   totalCommonLocations: number;
@@ -100,9 +107,19 @@ export interface FileManagerOverview {
 }
 
 export type UpdatePhase =
-  | "idle" | "checking" | "downloading" | "verifying" | "extracting"
-  | "installing" | "building" | "switching" | "restarting"
-  | "health-check" | "completed" | "failed" | "rolling-back";
+  | "idle"
+  | "checking"
+  | "downloading"
+  | "verifying"
+  | "extracting"
+  | "installing"
+  | "building"
+  | "switching"
+  | "restarting"
+  | "health-check"
+  | "completed"
+  | "failed"
+  | "rolling-back";
 
 export interface UpdateState {
   status: UpdatePhase;
@@ -135,7 +152,10 @@ export interface UpdateInfo {
 
 async function parse<T>(response: Response): Promise<T> {
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error((payload as { error?: string }).error || `Local API request failed (${response.status})`);
+  if (!response.ok)
+    throw new Error(
+      (payload as { error?: string }).error || `Local API request failed (${response.status})`,
+    );
   return payload as T;
 }
 
@@ -145,27 +165,46 @@ function headers(json = true): HeadersInit {
 
 async function get<T>(action: string, params: Record<string, string> = {}) {
   const query = new URLSearchParams({ action, ...params });
-  return parse<T>(await fetch(`/api/local?${query}`, { credentials: "same-origin", headers: headers(false), cache: "no-store" }));
+  return parse<T>(
+    await fetch(`/api/local?${query}`, {
+      credentials: "same-origin",
+      headers: headers(false),
+      cache: "no-store",
+    }),
+  );
 }
 
 async function post<T>(action: string, body: Record<string, unknown>) {
-  return parse<T>(await fetch(`/api/local?action=${encodeURIComponent(action)}`, {
-    method: "POST",
-    credentials: "same-origin",
-    headers: headers(true),
-    body: JSON.stringify(body),
-  }));
+  return parse<T>(
+    await fetch(`/api/local?action=${encodeURIComponent(action)}`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: headers(true),
+      body: JSON.stringify(body),
+    }),
+  );
 }
 
 function abortError(message: string) {
   return new DOMException(message, "AbortError");
 }
 
-function notifySilently(data: { title: string; message?: string; tone?: "info" | "success" | "warning" | "error"; link?: string; source?: string }) {
+function notifySilently(data: {
+  title: string;
+  message?: string;
+  tone?: "info" | "success" | "warning" | "error";
+  link?: string;
+  source?: string;
+}) {
   void wfilemanagerApi.createNotification(data).catch(() => undefined);
 }
 
-function uploadSingleFile(path: string, file: File, onProgress?: (loaded: number) => void, signal?: AbortSignal) {
+function uploadSingleFile(
+  path: string,
+  file: File,
+  onProgress?: (loaded: number) => void,
+  signal?: AbortSignal,
+) {
   return new Promise<LocalFileEntry>((resolve, reject) => {
     if (signal?.aborted) {
       reject(abortError(`Upload cancelled for ${file.name}`));
@@ -190,9 +229,18 @@ function uploadSingleFile(path: string, file: File, onProgress?: (loaded: number
     xhr.onload = () => {
       cleanup();
       let payload: unknown = {};
-      try { payload = JSON.parse(xhr.responseText || "{}"); } catch { /* Ignore malformed error payloads. */ }
+      try {
+        payload = JSON.parse(xhr.responseText || "{}");
+      } catch {
+        /* Ignore malformed error payloads. */
+      }
       if (xhr.status < 200 || xhr.status >= 300) {
-        reject(new Error((payload as { error?: string }).error || `Upload failed for ${file.name} (${xhr.status})`));
+        reject(
+          new Error(
+            (payload as { error?: string }).error ||
+              `Upload failed for ${file.name} (${xhr.status})`,
+          ),
+        );
         return;
       }
       onProgress?.(file.size);
@@ -203,7 +251,12 @@ function uploadSingleFile(path: string, file: File, onProgress?: (loaded: number
   });
 }
 
-async function uploadWithProgress(path: string, files: FileList | File[], onProgress?: (progress: ProgressState) => void, signal?: AbortSignal) {
+async function uploadWithProgress(
+  path: string,
+  files: FileList | File[],
+  onProgress?: (progress: ProgressState) => void,
+  signal?: AbortSignal,
+) {
   const values = Array.from(files);
   const total = values.reduce((sum, file) => sum + file.size, 0);
   let completed = 0;
@@ -212,21 +265,46 @@ async function uploadWithProgress(path: string, files: FileList | File[], onProg
 
   for (const file of values) {
     if (signal?.aborted) throw abortError("Upload cancelled");
-    const entry = await uploadSingleFile(path, file, (currentFileLoaded) => {
-      const loaded = Math.min(total, completed + currentFileLoaded);
-      onProgress?.({ loaded, total, percent: total ? Math.min(100, Math.round((loaded / total) * 100)) : 100, detail: file.name });
-    }, signal);
+    const entry = await uploadSingleFile(
+      path,
+      file,
+      (currentFileLoaded) => {
+        const loaded = Math.min(total, completed + currentFileLoaded);
+        onProgress?.({
+          loaded,
+          total,
+          percent: total ? Math.min(100, Math.round((loaded / total) * 100)) : 100,
+          detail: file.name,
+        });
+      },
+      signal,
+    );
     completed += file.size;
     uploaded.push(entry);
   }
 
   onProgress?.({ loaded: total, total, percent: 100 });
-  notifySilently({ title: "Upload completed", message: `${values.length} file(s) uploaded to ${path}.`, tone: "success", link: `/explorer?path=${encodeURIComponent(path)}`, source: "upload" });
+  notifySilently({
+    title: "Upload completed",
+    message: `${values.length} file(s) uploaded to ${path}.`,
+    tone: "success",
+    link: `/explorer?path=${encodeURIComponent(path)}`,
+    source: "upload",
+  });
   return { uploaded };
 }
 
-async function runJob(operation: "copy" | "move" | "delete", source: string, destination: string | undefined, onProgress?: (job: OperationJob) => void) {
-  const started = await post<{ job: OperationJob }>("job-start", { operation, source, destination });
+async function runJob(
+  operation: "copy" | "move" | "delete",
+  source: string,
+  destination: string | undefined,
+  onProgress?: (job: OperationJob) => void,
+) {
+  const started = await post<{ job: OperationJob }>("job-start", {
+    operation,
+    source,
+    destination,
+  });
   onProgress?.(started.job);
   const deadline = Date.now() + 24 * 60 * 60 * 1000;
   let delay = 500;
@@ -252,7 +330,12 @@ async function runJob(operation: "copy" | "move" | "delete", source: string, des
   throw new Error(`${operation} did not complete within 24 hours`);
 }
 
-async function downloadWithProgress(path: string, filename: string, onProgress?: (progress: ProgressState) => void, signal?: AbortSignal) {
+async function downloadWithProgress(
+  path: string,
+  filename: string,
+  onProgress?: (progress: ProgressState) => void,
+  signal?: AbortSignal,
+) {
   if (signal?.aborted) throw abortError(`Download cancelled for ${filename}`);
   onProgress?.({ loaded: 0, total: 0, percent: 0, detail: filename });
   const query = new URLSearchParams({ action: "download", path });
@@ -265,52 +348,109 @@ async function downloadWithProgress(path: string, filename: string, onProgress?:
   link.click();
   link.remove();
   onProgress?.({ loaded: 0, total: 0, percent: 100, detail: "Download handed to the browser" });
-  notifySilently({ title: "Download started", message: `${filename} is being streamed by your browser.`, tone: "info", source: "download" });
+  notifySilently({
+    title: "Download started",
+    message: `${filename} is being streamed by your browser.`,
+    tone: "info",
+    source: "download",
+  });
   return { downloaded: path, size: 0, started: true };
 }
 
 export const localApi = {
-  list: (path: string, cursor?: string, query?: string) => get<DirectoryResult>("list", { path, ...(cursor ? { cursor } : {}), ...(query ? { q: query } : {}) }),
-  read: (path: string) => get<{ path: string; content: string; size: number; mime: string; modifiedAt: string; mode: string }>("read", { path }),
+  list: (path: string, cursor?: string, query?: string) =>
+    get<DirectoryResult>("list", {
+      path,
+      ...(cursor ? { cursor } : {}),
+      ...(query ? { q: query } : {}),
+    }),
+  read: (path: string) =>
+    get<{
+      path: string;
+      content: string;
+      size: number;
+      mime: string;
+      modifiedAt: string;
+      mode: string;
+    }>("read", { path }),
   createFile: async (path: string, name: string) => {
     const result = await post<LocalFileEntry>("create-file", { path, name });
-    notifySilently({ title: "File created", message: result.path, tone: "success", link: `/explorer?path=${encodeURIComponent(path)}`, source: "file-operation" });
+    notifySilently({
+      title: "File created",
+      message: result.path,
+      tone: "success",
+      link: `/explorer?path=${encodeURIComponent(path)}`,
+      source: "file-operation",
+    });
     return result;
   },
   createDirectory: async (path: string, name: string) => {
     const result = await post<LocalFileEntry>("create-directory", { path, name });
-    notifySilently({ title: "Folder created", message: result.path, tone: "success", link: `/explorer?path=${encodeURIComponent(path)}`, source: "file-operation" });
+    notifySilently({
+      title: "Folder created",
+      message: result.path,
+      tone: "success",
+      link: `/explorer?path=${encodeURIComponent(path)}`,
+      source: "file-operation",
+    });
     return result;
   },
-  save: (path: string, content: string, expectedModifiedAt?: string) => post("save", { path, content, expectedModifiedAt }),
+  save: (path: string, content: string, expectedModifiedAt?: string) =>
+    post("save", { path, content, expectedModifiedAt }),
   rename: (path: string, name: string) => post("rename", { path, name }),
-  delete: (path: string, onProgress?: (job: OperationJob) => void) => runJob("delete", path, undefined, onProgress),
-  copy: (source: string, destination: string, onProgress?: (job: OperationJob) => void) => runJob("copy", source, destination, onProgress),
-  move: (source: string, destination: string, onProgress?: (job: OperationJob) => void) => runJob("move", source, destination, onProgress),
+  delete: (path: string, onProgress?: (job: OperationJob) => void) =>
+    runJob("delete", path, undefined, onProgress),
+  copy: (source: string, destination: string, onProgress?: (job: OperationJob) => void) =>
+    runJob("copy", source, destination, onProgress),
+  move: (source: string, destination: string, onProgress?: (job: OperationJob) => void) =>
+    runJob("move", source, destination, onProgress),
   cancelJob: (id: string) => post<{ job: OperationJob }>("job-cancel", { id }),
   chmod: (path: string, mode: string) => post("chmod", { path, mode }),
-  checksum: (path: string, algorithm: "sha256" | "sha512" = "sha256") => post<{ path: string; algorithm: string; checksum: string }>("checksum", { path, algorithm }),
+  checksum: (path: string, algorithm: "sha256" | "sha512" = "sha256") =>
+    post<{ path: string; algorithm: string; checksum: string }>("checksum", { path, algorithm }),
   trash: {
     list: () => get<TrashResult>("trash-list"),
     move: async (path: string) => {
       const result = await post<TrashItem>("trash-move", { path });
-      notifySilently({ title: "Moved to trash", message: result.originalPath, tone: "info", link: "/trash", source: "trash" });
+      notifySilently({
+        title: "Moved to trash",
+        message: result.originalPath,
+        tone: "info",
+        link: "/trash",
+        source: "trash",
+      });
       return result;
     },
     restore: async (id: string) => {
       const result = await post<{ restored: string; item: TrashItem }>("trash-restore", { id });
       const restoredParent = result.restored.split("/").slice(0, -1).join("/") || "/";
-      notifySilently({ title: "Item restored", message: result.restored, tone: "success", link: `/explorer?path=${encodeURIComponent(restoredParent)}`, source: "trash" });
+      notifySilently({
+        title: "Item restored",
+        message: result.restored,
+        tone: "success",
+        link: `/explorer?path=${encodeURIComponent(restoredParent)}`,
+        source: "trash",
+      });
       return result;
     },
     delete: async (id: string) => {
       const result = await post<{ deleted: string; item: TrashItem }>("trash-delete", { id });
-      notifySilently({ title: "Item permanently deleted", message: result.item.originalPath, tone: "warning", source: "trash" });
+      notifySilently({
+        title: "Item permanently deleted",
+        message: result.item.originalPath,
+        tone: "warning",
+        source: "trash",
+      });
       return result;
     },
     empty: async () => {
       const result = await post<{ deletedItems: number; deletedBytes: number }>("trash-empty", {});
-      notifySilently({ title: "Trash emptied", message: `${result.deletedItems} item(s) permanently deleted.`, tone: "warning", source: "trash" });
+      notifySilently({
+        title: "Trash emptied",
+        message: `${result.deletedItems} item(s) permanently deleted.`,
+        tone: "warning",
+        source: "trash",
+      });
       return result;
     },
   },
@@ -321,10 +461,22 @@ export const localApi = {
   upload: uploadWithProgress,
   download: downloadWithProgress,
   terminalIdentity: () => get<TerminalIdentity>("terminal-user"),
-  ptyCreate: (cwd: string | undefined, cols = 120, rows = 32, mode: "user" | "root" = "user", password?: string) =>
-    post<{ sessionId: string; mode: "user" | "root"; linuxUsername: string; home: string }>("pty-create", { cwd, cols, rows, mode, password }),
-  ptyInput: (sessionId: string, data: string) => post<{ success: true }>("pty-input", { sessionId, data }),
-  ptyResize: (sessionId: string, cols: number, rows: number) => post<{ success: true }>("pty-resize", { sessionId, cols, rows }),
-  ptyOutput: (sessionId: string, cursor: number) => get<PtyOutput>("pty-output", { id: sessionId, cursor: String(cursor) }),
+  ptyCreate: (
+    cwd: string | undefined,
+    cols = 120,
+    rows = 32,
+    mode: "user" | "root" = "user",
+    password?: string,
+  ) =>
+    post<{ sessionId: string; mode: "user" | "root"; linuxUsername: string; home: string }>(
+      "pty-create",
+      { cwd, cols, rows, mode, password },
+    ),
+  ptyInput: (sessionId: string, data: string) =>
+    post<{ success: true }>("pty-input", { sessionId, data }),
+  ptyResize: (sessionId: string, cols: number, rows: number) =>
+    post<{ success: true }>("pty-resize", { sessionId, cols, rows }),
+  ptyOutput: (sessionId: string, cursor: number) =>
+    get<PtyOutput>("pty-output", { id: sessionId, cursor: String(cursor) }),
   ptyClose: (sessionId: string) => post<{ success: true }>("pty-close", { sessionId }),
 };

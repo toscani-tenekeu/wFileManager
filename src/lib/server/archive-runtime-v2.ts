@@ -4,8 +4,14 @@ import { lstat, stat } from "node:fs/promises";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
-const ARCHIVE_TIMEOUT_MS = Math.max(60_000, Number(process.env.WFILEMANAGER_ARCHIVE_TIMEOUT_MS || 3_600_000));
-const INSPECT_TIMEOUT_MS = Math.max(10_000, Number(process.env.WFILEMANAGER_ARCHIVE_INSPECT_TIMEOUT_MS || 120_000));
+const ARCHIVE_TIMEOUT_MS = Math.max(
+  60_000,
+  Number(process.env.WFILEMANAGER_ARCHIVE_TIMEOUT_MS || 3_600_000),
+);
+const INSPECT_TIMEOUT_MS = Math.max(
+  10_000,
+  Number(process.env.WFILEMANAGER_ARCHIVE_INSPECT_TIMEOUT_MS || 120_000),
+);
 
 export type ArchiveFormat = "zip" | "tar.gz";
 export type ExtractionMode = "current" | "folder" | "custom";
@@ -294,18 +300,33 @@ print(json.dumps(output, separators=(",", ":")))
 `;
 
 function normalizeAbsolutePath(value: unknown) {
-  if (typeof value !== "string" || !value.trim() || value.includes("\0")) throw new Error("A valid absolute path is required");
+  if (typeof value !== "string" || !value.trim() || value.includes("\0"))
+    throw new Error("A valid absolute path is required");
   if (!path.isAbsolute(value)) throw new Error("Archive paths must be absolute");
   return path.resolve(value);
 }
 
 function folderNameFromArchive(value: string) {
-  return path.basename(value).replace(/\.tar\.gz$/i, "").replace(/\.tgz$/i, "").replace(/\.zip$/i, "") || "extracted";
+  return (
+    path
+      .basename(value)
+      .replace(/\.tar\.gz$/i, "")
+      .replace(/\.tgz$/i, "")
+      .replace(/\.zip$/i, "") || "extracted"
+  );
 }
 
 function safeFolderName(value: unknown, fallback: string) {
   const candidate = typeof value === "string" && value.trim() ? value.trim() : fallback;
-  if (!candidate || candidate === "." || candidate === ".." || candidate.includes("/") || candidate.includes("\\") || candidate.includes("\0")) throw new Error("Extraction folder name is invalid");
+  if (
+    !candidate ||
+    candidate === "." ||
+    candidate === ".." ||
+    candidate.includes("/") ||
+    candidate.includes("\\") ||
+    candidate.includes("\0")
+  )
+    throw new Error("Extraction folder name is invalid");
   return candidate;
 }
 
@@ -313,7 +334,12 @@ async function uniquePath(parent: string, base: string, suffix = "") {
   for (let index = 0; index < 10_000; index += 1) {
     const name = index === 0 ? `${base}${suffix}` : `${base} (${index})${suffix}`;
     const candidate = path.join(parent, name);
-    if (!await lstat(candidate).then(() => true).catch(() => false)) return candidate;
+    if (
+      !(await lstat(candidate)
+        .then(() => true)
+        .catch(() => false))
+    )
+      return candidate;
   }
   throw new Error("Unable to find an available destination name");
 }
@@ -327,7 +353,10 @@ async function runPython<T>(args: string[], timeout: number): Promise<T> {
     });
     return JSON.parse(stdout.trim()) as T;
   } catch (cause: any) {
-    const raw = typeof cause?.stderr === "string" && cause.stderr.trim() ? cause.stderr.trim().split("\n").at(-1) : cause?.message;
+    const raw =
+      typeof cause?.stderr === "string" && cause.stderr.trim()
+        ? cause.stderr.trim().split("\n").at(-1)
+        : cause?.message;
     throw new Error(String(raw || "Archive operation failed").replace(/^RuntimeError:\s*/, ""));
   }
 }
@@ -336,11 +365,20 @@ export async function inspectArchive(inputPath: unknown): Promise<ArchiveInspect
   const archivePath = normalizeAbsolutePath(inputPath);
   const info = await lstat(archivePath).catch(() => null);
   if (!info?.isFile()) throw new Error("Archive file not found");
-  const result = await runPython<{ format: ArchiveFormat; entries: number; topLevelItems: ArchiveTopLevelItem[] }>(["inspect", archivePath], INSPECT_TIMEOUT_MS);
+  const result = await runPython<{
+    format: ArchiveFormat;
+    entries: number;
+    topLevelItems: ArchiveTopLevelItem[];
+  }>(["inspect", archivePath], INSPECT_TIMEOUT_MS);
   const destinationParent = path.dirname(archivePath);
   const defaultConflicts: string[] = [];
   for (const item of result.topLevelItems) {
-    if (await lstat(path.join(destinationParent, item.name)).then(() => true).catch(() => false)) defaultConflicts.push(item.name);
+    if (
+      await lstat(path.join(destinationParent, item.name))
+        .then(() => true)
+        .catch(() => false)
+    )
+      defaultConflicts.push(item.name);
   }
   return {
     path: archivePath,
@@ -360,10 +398,14 @@ export async function createArchive(inputPath: unknown, formatInput: unknown) {
   const format = formatInput === "zip" ? "zip" : formatInput === "tar.gz" ? "tar.gz" : null;
   if (!format) throw new Error("Archive format must be zip or tar.gz");
   const info = await lstat(source).catch(() => null);
-  if (!info || info.isSymbolicLink() || (!info.isFile() && !info.isDirectory())) throw new Error("Only regular files and directories can be compressed");
+  if (!info || info.isSymbolicLink() || (!info.isFile() && !info.isDirectory()))
+    throw new Error("Only regular files and directories can be compressed");
   const suffix = format === "zip" ? ".zip" : ".tar.gz";
   const target = await uniquePath(path.dirname(source), path.basename(source), suffix);
-  return runPython<{ path: string; format: ArchiveFormat; skippedLinks: number }>(["create", source, target, format], ARCHIVE_TIMEOUT_MS);
+  return runPython<{ path: string; format: ArchiveFormat; skippedLinks: number }>(
+    ["create", source, target, format],
+    ARCHIVE_TIMEOUT_MS,
+  );
 }
 
 export async function extractArchive(
@@ -375,19 +417,33 @@ export async function extractArchive(
 ) {
   const archivePath = normalizeAbsolutePath(inputPath);
   const inspection = await inspectArchive(archivePath);
-  const mode: ExtractionMode = modeInput === "current" || modeInput === "folder" || modeInput === "custom" ? modeInput : (() => { throw new Error("Extraction mode is invalid"); })();
-  const conflictPolicy: ConflictPolicy = conflictPolicyInput === "overwrite" || conflictPolicyInput === "error" || conflictPolicyInput === "rename" ? conflictPolicyInput : "rename";
+  const mode: ExtractionMode =
+    modeInput === "current" || modeInput === "folder" || modeInput === "custom"
+      ? modeInput
+      : (() => {
+          throw new Error("Extraction mode is invalid");
+        })();
+  const conflictPolicy: ConflictPolicy =
+    conflictPolicyInput === "overwrite" ||
+    conflictPolicyInput === "error" ||
+    conflictPolicyInput === "rename"
+      ? conflictPolicyInput
+      : "rename";
   const parent = path.dirname(archivePath);
   let destination = parent;
   let destinationIsNew = false;
   if (mode === "folder") {
     const folderName = safeFolderName(folderNameInput, inspection.suggestedFolder);
-    destination = conflictPolicy === "rename" ? await uniquePath(parent, folderName) : path.join(parent, folderName);
+    destination =
+      conflictPolicy === "rename"
+        ? await uniquePath(parent, folderName)
+        : path.join(parent, folderName);
     destinationIsNew = true;
   } else if (mode === "custom") {
     destination = normalizeAbsolutePath(destinationInput);
     const destinationInfo = await stat(destination).catch(() => null);
-    if (!destinationInfo?.isDirectory()) throw new Error("The selected extraction destination does not exist or is not a directory");
+    if (!destinationInfo?.isDirectory())
+      throw new Error("The selected extraction destination does not exist or is not a directory");
   }
   const result = await runPython<{
     archive: string;
@@ -397,6 +453,9 @@ export async function extractArchive(
     topLevelEntries: string[];
     renamedTopLevel: Record<string, string>;
     conflicts: string[];
-  }>(["extract", archivePath, destination, destinationIsNew ? "1" : "0", conflictPolicy], ARCHIVE_TIMEOUT_MS);
+  }>(
+    ["extract", archivePath, destination, destinationIsNew ? "1" : "0", conflictPolicy],
+    ARCHIVE_TIMEOUT_MS,
+  );
   return { ...result, mode, conflictPolicy };
 }

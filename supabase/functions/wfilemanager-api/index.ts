@@ -3,17 +3,20 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-wfilemanager-instance",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-wfilemanager-instance",
   "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
   "Cache-Control": "no-store",
 };
 
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
-  status,
-  headers: { ...cors, "Content-Type": "application/json" },
-});
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...cors, "Content-Type": "application/json" },
+  });
 
-const STORAGE_FULL_MESSAGE = "Managed storage is full. Access is blocked. Contact support@kmerhosting.com to increase your Pro quota.";
+const STORAGE_FULL_MESSAGE =
+  "Managed storage is full. Access is blocked. Contact support@kmerhosting.com to increase your Pro quota.";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -24,12 +27,18 @@ const supabase = createClient(
 const encoder = new TextEncoder();
 
 type AuthResult =
-  | { session: Record<string, unknown>; user: Record<string, unknown>; instance: Record<string, unknown> }
+  | {
+      session: Record<string, unknown>;
+      user: Record<string, unknown>;
+      instance: Record<string, unknown>;
+    }
   | { response: Response }
   | null;
 
 function bytesToHex(bytes: Uint8Array) {
-  return Array.from(bytes).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return Array.from(bytes)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function randomHex(length = 32) {
@@ -46,7 +55,9 @@ async function passwordHash(password: string, saltHex: string, iterations = 2100
   const pairs = saltHex.match(/.{1,2}/g);
   if (!pairs) throw new Error("Invalid password salt");
   const salt = new Uint8Array(pairs.map((value) => Number.parseInt(value, 16)));
-  const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
+  const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, [
+    "deriveBits",
+  ]);
   const bits = await crypto.subtle.deriveBits(
     { name: "PBKDF2", hash: "SHA-256", salt, iterations },
     key,
@@ -83,10 +94,14 @@ async function getInstance(instanceKey: string) {
 
 async function touchInstance(instanceId: string) {
   const now = new Date().toISOString();
-  await supabase.from("wfilemanager_instances").update({
-    last_seen_at: now,
-    updated_at: now,
-  }).eq("id", instanceId).eq("status", "active");
+  await supabase
+    .from("wfilemanager_instances")
+    .update({
+      last_seen_at: now,
+      updated_at: now,
+    })
+    .eq("id", instanceId)
+    .eq("status", "active");
 }
 
 function asNumber(value: unknown, fallback = 0) {
@@ -102,13 +117,16 @@ function isProStorageFull(instance: Record<string, unknown>) {
 }
 
 function storageBlockedResponse(instance: Record<string, unknown>) {
-  return json({
-    error: STORAGE_FULL_MESSAGE,
-    code: "pro_storage_full",
-    storageUsedBytes: asNumber(instance.storage_used_bytes, 0),
-    storageQuotaBytes: asNumber(instance.storage_quota_bytes, 0),
-    supportEmail: "support@kmerhosting.com",
-  }, 402);
+  return json(
+    {
+      error: STORAGE_FULL_MESSAGE,
+      code: "pro_storage_full",
+      storageUsedBytes: asNumber(instance.storage_used_bytes, 0),
+      storageQuotaBytes: asNumber(instance.storage_quota_bytes, 0),
+      supportEmail: "support@kmerhosting.com",
+    },
+    402,
+  );
 }
 
 async function refreshStorageUsage(instance: Record<string, unknown>) {
@@ -138,7 +156,8 @@ async function authenticate(request: Request, instanceKey: string): Promise<Auth
   const user = data.wfilemanager_users;
   if (!user || user.status !== "active") return null;
   const rawInstance = await getInstance(instanceKey);
-  if (!rawInstance || rawInstance.id !== data.instance_id || rawInstance.status !== "active") return null;
+  if (!rawInstance || rawInstance.id !== data.instance_id || rawInstance.status !== "active")
+    return null;
   const instance = await refreshStorageUsage(rawInstance);
   if (isProStorageFull(instance)) return { response: storageBlockedResponse(instance) };
   const now = new Date().toISOString();
@@ -190,14 +209,16 @@ async function proPlanDetails(instance: Record<string, unknown>) {
 
   const storageUsedBytes = asNumber(instance.storage_used_bytes, 0);
   const storageQuotaBytes = asNumber(instance.storage_quota_bytes, 104_857_600);
-  const storagePercent = storageQuotaBytes > 0
-    ? Math.min(100, Math.round((storageUsedBytes / storageQuotaBytes) * 100))
-    : 0;
+  const storagePercent =
+    storageQuotaBytes > 0
+      ? Math.min(100, Math.round((storageUsedBytes / storageQuotaBytes) * 100))
+      : 0;
   const paidUntil = typeof instance.paid_until === "string" ? instance.paid_until : null;
 
   return {
     servicePlan: typeof instance.service_plan === "string" ? instance.service_plan : null,
-    subscriptionStatus: typeof instance.subscription_status === "string" ? instance.subscription_status : null,
+    subscriptionStatus:
+      typeof instance.subscription_status === "string" ? instance.subscription_status : null,
     dataStatus: typeof instance.data_status === "string" ? instance.data_status : null,
     paidUntil,
     nextPaymentAt: paidUntil,
@@ -219,8 +240,14 @@ Deno.serve(async (request: Request) => {
   try {
     const url = new URL(request.url);
     const action = url.pathname.split("/").filter(Boolean).pop() || "status";
-    const instanceKey = request.headers.get("x-wfilemanager-instance") || url.searchParams.get("instance") || "default";
-    const body = request.method === "GET" ? {} : await request.json().catch(() => ({})) as Record<string, unknown>;
+    const instanceKey =
+      request.headers.get("x-wfilemanager-instance") ||
+      url.searchParams.get("instance") ||
+      "default";
+    const body =
+      request.method === "GET"
+        ? {}
+        : ((await request.json().catch(() => ({}))) as Record<string, unknown>);
 
     if (action === "status") {
       const instance = await getInstance(instanceKey);
@@ -255,17 +282,24 @@ Deno.serve(async (request: Request) => {
       const rawInstance = await getInstance(instanceKey);
       if (!rawInstance) return json({ error: "Instance is not configured" }, 404);
       if (rawInstance.status === "frozen") {
-        return json({
-          error: "This installation is frozen after 30 days without a valid server heartbeat. Recover it with the saved Recovery Kit.",
-          status: "frozen",
-          deleteAfterAt: rawInstance.delete_after_at,
-        }, 423);
+        return json(
+          {
+            error:
+              "This installation is frozen after 30 days without a valid server heartbeat. Recover it with the saved Recovery Kit.",
+            status: "frozen",
+            deleteAfterAt: rawInstance.delete_after_at,
+          },
+          423,
+        );
       }
-      if (rawInstance.status !== "active") return json({ error: "This installation is disabled" }, 403);
+      if (rawInstance.status !== "active")
+        return json({ error: "This installation is disabled" }, 403);
       const instance = await refreshStorageUsage(rawInstance);
       if (isProStorageFull(instance)) return storageBlockedResponse(instance);
 
-      const login = String(body.login || body.username || "").trim().toLowerCase();
+      const login = String(body.login || body.username || "")
+        .trim()
+        .toLowerCase();
       const { data: user } = await supabase
         .from("wfilemanager_users")
         .select("*")
@@ -284,7 +318,11 @@ Deno.serve(async (request: Request) => {
         return json({ error: "Invalid username or password" }, 401);
       }
 
-      const hash = await passwordHash(String(body.password || ""), user.password_salt, user.password_iterations || 210000);
+      const hash = await passwordHash(
+        String(body.password || ""),
+        user.password_salt,
+        user.password_iterations || 210000,
+      );
       if (hash !== user.password_hash) {
         await audit({
           instanceId: String(instance.id),
@@ -301,14 +339,18 @@ Deno.serve(async (request: Request) => {
       const rawToken = randomHex(32);
       const tokenHash = await sha256(rawToken);
       const expires = new Date(Date.now() + (body.remember ? 30 * 24 : 12) * 60 * 60 * 1000);
-      const sessionResult = await supabase.from("wfilemanager_sessions").insert({
-        instance_id: instance.id,
-        user_id: user.id,
-        token_hash: tokenHash,
-        expires_at: expires.toISOString(),
-        user_agent: request.headers.get("user-agent"),
-        ip_address: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-      }).select("id, expires_at").single();
+      const sessionResult = await supabase
+        .from("wfilemanager_sessions")
+        .insert({
+          instance_id: instance.id,
+          user_id: user.id,
+          token_hash: tokenHash,
+          expires_at: expires.toISOString(),
+          user_agent: request.headers.get("user-agent"),
+          ip_address: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
+        })
+        .select("id, expires_at")
+        .single();
       if (sessionResult.error) throw sessionResult.error;
 
       const now = new Date().toISOString();
@@ -316,8 +358,18 @@ Deno.serve(async (request: Request) => {
         supabase.from("wfilemanager_users").update({ last_login_at: now }).eq("id", user.id),
         touchInstance(String(instance.id)),
       ]);
-      await audit({ instanceId: String(instance.id), userId: user.id, username: user.username, action: "auth.login", request });
-      return json({ token: rawToken, expiresAt: sessionResult.data.expires_at, user: safeUser(user) });
+      await audit({
+        instanceId: String(instance.id),
+        userId: user.id,
+        username: user.username,
+        action: "auth.login",
+        request,
+      });
+      return json({
+        token: rawToken,
+        expiresAt: sessionResult.data.expires_at,
+        user: safeUser(user),
+      });
     }
 
     const auth = await authenticate(request, instanceKey);
@@ -327,7 +379,11 @@ Deno.serve(async (request: Request) => {
     if (action === "verify-password") {
       if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
       const password = String(body.password || "");
-      const hash = await passwordHash(password, String(auth.user.password_salt), Number(auth.user.password_iterations || 210000));
+      const hash = await passwordHash(
+        password,
+        String(auth.user.password_salt),
+        Number(auth.user.password_iterations || 210000),
+      );
       const valid = hash === auth.user.password_hash;
       await audit({
         instanceId: String(auth.instance.id),
@@ -366,7 +422,8 @@ Deno.serve(async (request: Request) => {
       const header = request.headers.get("Authorization") || "";
       const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
       if (token) {
-        await supabase.from("wfilemanager_sessions")
+        await supabase
+          .from("wfilemanager_sessions")
           .update({ revoked_at: new Date().toISOString() })
           .eq("token_hash", await sha256(token));
       }
@@ -385,29 +442,38 @@ Deno.serve(async (request: Request) => {
       if (request.method === "GET") {
         const { data, error } = await supabase
           .from("wfilemanager_users")
-          .select("id,instance_id,role_id,username,email,display_name,status,is_admin,must_change_password,last_login_at,created_at")
+          .select(
+            "id,instance_id,role_id,username,email,display_name,status,is_admin,must_change_password,last_login_at,created_at",
+          )
           .eq("instance_id", auth.instance.id)
           .order("created_at");
         if (error) throw error;
         return json({ users: (data || []).map(safeUser) });
       }
       if (request.method === "POST") {
-        const username = String(body.username || "").trim().toLowerCase();
+        const username = String(body.username || "")
+          .trim()
+          .toLowerCase();
         const password = String(body.password || "");
-        if (username.length < 3 || password.length < 8) return json({ error: "Invalid username or password length" }, 400);
+        if (username.length < 3 || password.length < 8)
+          return json({ error: "Invalid username or password length" }, 400);
         const salt = randomHex(16);
-        const userResult = await supabase.from("wfilemanager_users").insert({
-          instance_id: auth.instance.id,
-          role_id: body.roleId || null,
-          username,
-          email: body.email ? String(body.email).trim().toLowerCase() : null,
-          display_name: String(body.displayName || username),
-          password_hash: await passwordHash(password, salt),
-          password_salt: salt,
-          status: body.status || "active",
-          is_admin: false,
-          must_change_password: Boolean(body.mustChangePassword),
-        }).select().single();
+        const userResult = await supabase
+          .from("wfilemanager_users")
+          .insert({
+            instance_id: auth.instance.id,
+            role_id: body.roleId || null,
+            username,
+            email: body.email ? String(body.email).trim().toLowerCase() : null,
+            display_name: String(body.displayName || username),
+            password_hash: await passwordHash(password, salt),
+            password_salt: salt,
+            status: body.status || "active",
+            is_admin: false,
+            must_change_password: Boolean(body.mustChangePassword),
+          })
+          .select()
+          .single();
         if (userResult.error) throw userResult.error;
         await audit({
           instanceId: String(auth.instance.id),

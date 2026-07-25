@@ -39,8 +39,19 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { toast } from "sonner";
-import { localApi, type LocalFileEntry, type OperationJob, type ProgressState } from "@/lib/local-api";
-import { archiveApi, type ArchiveFormat, type ArchiveInspection, type ConflictPolicy, type ExtractionMode } from "@/lib/archive-api";
+import {
+  localApi,
+  type LocalFileEntry,
+  type OperationJob,
+  type ProgressState,
+} from "@/lib/local-api";
+import {
+  archiveApi,
+  type ArchiveFormat,
+  type ArchiveInspection,
+  type ConflictPolicy,
+  type ExtractionMode,
+} from "@/lib/archive-api";
 import { formatBytes, formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -135,20 +146,72 @@ function isArchiveEntry(entry: LocalFileEntry) {
 
 function entryVisual(entry: LocalFileEntry) {
   if (entry.kind === "directory") {
-    return { Icon: Folder, tone: "border-primary/20 bg-primary/10 text-primary", icon: "fill-primary/15 text-primary" };
+    return {
+      Icon: Folder,
+      tone: "border-primary/20 bg-primary/10 text-primary",
+      icon: "fill-primary/15 text-primary",
+    };
   }
   if (entry.kind === "symlink") {
-    return { Icon: Link2, tone: "border-sky-500/20 bg-sky-500/10 text-sky-400", icon: "text-sky-400" };
+    return {
+      Icon: Link2,
+      tone: "border-sky-500/20 bg-sky-500/10 text-sky-400",
+      icon: "text-sky-400",
+    };
   }
   const extension = entry.name.split(".").pop()?.toLowerCase() || "";
-  if (entry.mime.startsWith("image/")) return { Icon: FileImage, tone: "border-fuchsia-500/20 bg-fuchsia-500/10", icon: "text-fuchsia-400" };
-  if (entry.mime.startsWith("audio/")) return { Icon: FileAudio, tone: "border-pink-500/20 bg-pink-500/10", icon: "text-pink-400" };
-  if (entry.mime.startsWith("video/")) return { Icon: FileVideo, tone: "border-violet-500/20 bg-violet-500/10", icon: "text-violet-400" };
-  if (["zip", "gz", "bz2", "xz", "7z", "rar", "tar"].includes(extension)) return { Icon: FileArchive, tone: "border-amber-500/20 bg-amber-500/10", icon: "text-amber-400" };
-  if (["js", "jsx", "ts", "tsx", "mjs", "cjs", "py", "php", "sh", "bash", "css", "html", "sql"].includes(extension)) return { Icon: FileCode2, tone: "border-cyan-500/20 bg-cyan-500/10", icon: "text-cyan-400" };
-  if (["json", "yaml", "yml", "xml"].includes(extension)) return { Icon: FileJson2, tone: "border-yellow-500/20 bg-yellow-500/10", icon: "text-yellow-400" };
-  if (["csv", "xls", "xlsx", "ods"].includes(extension)) return { Icon: FileSpreadsheet, tone: "border-emerald-500/20 bg-emerald-500/10", icon: "text-emerald-400" };
-  if (entry.mime.startsWith("text/") || ["md", "log", "conf", "ini", "service"].includes(extension)) return { Icon: FileText, tone: "border-blue-500/20 bg-blue-500/10", icon: "text-blue-400" };
+  if (entry.mime.startsWith("image/"))
+    return {
+      Icon: FileImage,
+      tone: "border-fuchsia-500/20 bg-fuchsia-500/10",
+      icon: "text-fuchsia-400",
+    };
+  if (entry.mime.startsWith("audio/"))
+    return { Icon: FileAudio, tone: "border-pink-500/20 bg-pink-500/10", icon: "text-pink-400" };
+  if (entry.mime.startsWith("video/"))
+    return {
+      Icon: FileVideo,
+      tone: "border-violet-500/20 bg-violet-500/10",
+      icon: "text-violet-400",
+    };
+  if (["zip", "gz", "bz2", "xz", "7z", "rar", "tar"].includes(extension))
+    return {
+      Icon: FileArchive,
+      tone: "border-amber-500/20 bg-amber-500/10",
+      icon: "text-amber-400",
+    };
+  if (
+    [
+      "js",
+      "jsx",
+      "ts",
+      "tsx",
+      "mjs",
+      "cjs",
+      "py",
+      "php",
+      "sh",
+      "bash",
+      "css",
+      "html",
+      "sql",
+    ].includes(extension)
+  )
+    return { Icon: FileCode2, tone: "border-cyan-500/20 bg-cyan-500/10", icon: "text-cyan-400" };
+  if (["json", "yaml", "yml", "xml"].includes(extension))
+    return {
+      Icon: FileJson2,
+      tone: "border-yellow-500/20 bg-yellow-500/10",
+      icon: "text-yellow-400",
+    };
+  if (["csv", "xls", "xlsx", "ods"].includes(extension))
+    return {
+      Icon: FileSpreadsheet,
+      tone: "border-emerald-500/20 bg-emerald-500/10",
+      icon: "text-emerald-400",
+    };
+  if (entry.mime.startsWith("text/") || ["md", "log", "conf", "ini", "service"].includes(extension))
+    return { Icon: FileText, tone: "border-blue-500/20 bg-blue-500/10", icon: "text-blue-400" };
   return { Icon: FileIcon, tone: "border-border bg-muted/40", icon: "text-muted-foreground" };
 }
 
@@ -176,7 +239,9 @@ function Explorer() {
   const [renameEntry, setRenameEntry] = useState<LocalFileEntry | null>(null);
   const [renameName, setRenameName] = useState("");
   const [deleteEntries, setDeleteEntries] = useState<LocalFileEntry[]>([]);
-  const [transfer, setTransfer] = useState<{ kind: TransferKind; entry: LocalFileEntry } | null>(null);
+  const [transfer, setTransfer] = useState<{ kind: TransferKind; entry: LocalFileEntry } | null>(
+    null,
+  );
   const [destination, setDestination] = useState(currentPath);
   const [modeEntry, setModeEntry] = useState<LocalFileEntry | null>(null);
   const [mode, setMode] = useState("");
@@ -265,13 +330,15 @@ function Explorer() {
     [entries, selectedPaths],
   );
 
-  const allVisibleSelected = visibleEntries.length > 0 && visibleEntries.every((entry) => selectedPaths.has(entry.path));
+  const allVisibleSelected =
+    visibleEntries.length > 0 && visibleEntries.every((entry) => selectedPaths.has(entry.path));
   const someVisibleSelected = visibleEntries.some((entry) => selectedPaths.has(entry.path));
 
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
+      const typing =
+        target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
       if (typing) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
         event.preventDefault();
@@ -294,14 +361,19 @@ function Explorer() {
     ];
   }, [currentPath]);
 
-  const selectEntry = (entry: LocalFileEntry, options: { additive?: boolean; range?: boolean } = {}) => {
+  const selectEntry = (
+    entry: LocalFileEntry,
+    options: { additive?: boolean; range?: boolean } = {},
+  ) => {
     if (options.range && lastSelectedPath) {
       const start = visibleEntries.findIndex((item) => item.path === lastSelectedPath);
       const end = visibleEntries.findIndex((item) => item.path === entry.path);
       if (start >= 0 && end >= 0) {
         const [from, to] = start < end ? [start, end] : [end, start];
         const rangePaths = visibleEntries.slice(from, to + 1).map((item) => item.path);
-        setSelectedPaths((current) => new Set(options.additive ? [...current, ...rangePaths] : rangePaths));
+        setSelectedPaths(
+          (current) => new Set(options.additive ? [...current, ...rangePaths] : rangePaths),
+        );
         return;
       }
     }
@@ -366,7 +438,8 @@ function Explorer() {
     }
   };
 
-  const isCancelled = (cause: unknown) => cause instanceof DOMException && cause.name === "AbortError";
+  const isCancelled = (cause: unknown) =>
+    cause instanceof DOMException && cause.name === "AbortError";
 
   const downloadEntry = async (entry: LocalFileEntry) => {
     if (operationProgress) {
@@ -381,14 +454,19 @@ function Explorer() {
       cancel: () => controller.abort(),
     });
     try {
-      await localApi.download(entry.path, entry.name, (value) => {
-        setOperationProgress({
-          label: `Downloading ${entry.name}`,
-          percent: value.percent,
-          detail: `${formatBytes(value.loaded)} / ${formatBytes(value.total || entry.size)}`,
-          cancel: () => controller.abort(),
-        });
-      }, controller.signal);
+      await localApi.download(
+        entry.path,
+        entry.name,
+        (value) => {
+          setOperationProgress({
+            label: `Downloading ${entry.name}`,
+            percent: value.percent,
+            detail: `${formatBytes(value.loaded)} / ${formatBytes(value.total || entry.size)}`,
+            cancel: () => controller.abort(),
+          });
+        },
+        controller.signal,
+      );
       toast.success(`${entry.name} downloaded`);
     } catch (cause) {
       if (isCancelled(cause)) toast.info(`Download of ${entry.name} cancelled`);
@@ -401,11 +479,21 @@ function Explorer() {
   const createArchive = async (entry: LocalFileEntry, format: ArchiveFormat) => {
     if (archiveBusy) return;
     setArchiveBusy(true);
-    setOperationProgress({ label: `Creating ${format.toUpperCase()} archive`, percent: 15, detail: entry.name });
+    setOperationProgress({
+      label: `Creating ${format.toUpperCase()} archive`,
+      percent: 15,
+      detail: entry.name,
+    });
     try {
       const result = await archiveApi.create(entry.path, format);
-      setOperationProgress({ label: `Creating ${format.toUpperCase()} archive`, percent: 100, detail: result.path });
-      toast.success(`${result.path} created${result.skippedLinks ? ` · ${result.skippedLinks} link(s) skipped` : ""}`);
+      setOperationProgress({
+        label: `Creating ${format.toUpperCase()} archive`,
+        percent: 100,
+        detail: result.path,
+      });
+      toast.success(
+        `${result.path} created${result.skippedLinks ? ` · ${result.skippedLinks} link(s) skipped` : ""}`,
+      );
       await load();
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Archive creation failed");
@@ -418,7 +506,11 @@ function Explorer() {
   const extractArchive = async (entry: LocalFileEntry) => {
     if (archiveBusy) return;
     setArchiveBusy(true);
-    setOperationProgress({ label: `Inspecting ${entry.name}`, percent: 15, detail: "Checking archive safety and destination" });
+    setOperationProgress({
+      label: `Inspecting ${entry.name}`,
+      percent: 15,
+      detail: "Checking archive safety and destination",
+    });
     try {
       const inspection = await archiveApi.inspect(entry.path);
       setOperationProgress(null);
@@ -429,9 +521,20 @@ function Explorer() {
         setExtractMode("current");
         setExtractPlan({ entry, inspection });
       } else {
-        setOperationProgress({ label: `Extracting ${entry.name}`, percent: 35, detail: `Into ${inspection.destinationParent}` });
-        const result = await archiveApi.extract(entry.path, { mode: "current", conflictPolicy: "error" });
-        setOperationProgress({ label: `Extracting ${entry.name}`, percent: 100, detail: result.extractedTo });
+        setOperationProgress({
+          label: `Extracting ${entry.name}`,
+          percent: 35,
+          detail: `Into ${inspection.destinationParent}`,
+        });
+        const result = await archiveApi.extract(entry.path, {
+          mode: "current",
+          conflictPolicy: "error",
+        });
+        setOperationProgress({
+          label: `Extracting ${entry.name}`,
+          percent: 100,
+          detail: result.extractedTo,
+        });
         toast.success(`${entry.name} extracted into ${result.extractedTo}`);
         await load();
       }
@@ -449,22 +552,30 @@ function Explorer() {
     const plan = extractPlan;
     setExtractPlan(null);
     setArchiveBusy(true);
-    const detail = mode === "folder"
-      ? `Into ${extractFolderName || plan.inspection.suggestedFolder}`
-      : mode === "custom"
-        ? `Into ${extractDestination}`
-        : `Into ${plan.inspection.destinationParent}`;
+    const detail =
+      mode === "folder"
+        ? `Into ${extractFolderName || plan.inspection.suggestedFolder}`
+        : mode === "custom"
+          ? `Into ${extractDestination}`
+          : `Into ${plan.inspection.destinationParent}`;
     setOperationProgress({ label: `Extracting ${plan.entry.name}`, percent: 35, detail });
     try {
       const result = await archiveApi.extract(plan.entry.path, {
         mode,
-        folderName: mode === "folder" ? extractFolderName || plan.inspection.suggestedFolder : undefined,
+        folderName:
+          mode === "folder" ? extractFolderName || plan.inspection.suggestedFolder : undefined,
         destination: mode === "custom" ? extractDestination : undefined,
         conflictPolicy: extractConflictPolicy,
       });
-      setOperationProgress({ label: `Extracting ${plan.entry.name}`, percent: 100, detail: result.extractedTo });
+      setOperationProgress({
+        label: `Extracting ${plan.entry.name}`,
+        percent: 100,
+        detail: result.extractedTo,
+      });
       const renamed = Object.entries(result.renamedTopLevel).filter(([from, to]) => from !== to);
-      toast.success(`${plan.entry.name} extracted into ${result.extractedTo}${renamed.length ? ` · ${renamed.length} conflict(s) renamed` : ""}`);
+      toast.success(
+        `${plan.entry.name} extracted into ${result.extractedTo}${renamed.length ? ` · ${renamed.length} conflict(s) renamed` : ""}`,
+      );
       await load();
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Archive extraction failed");
@@ -504,39 +615,131 @@ function Explorer() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
-        <DropdownMenuItem onClick={() => void openEntry(entry)}><Eye className="mr-2 h-4 w-4" />{entry.kind === "directory" ? "Open" : "View / edit"}</DropdownMenuItem>
-        {entry.kind === "file" && <DropdownMenuItem onClick={() => void downloadEntry(entry)}><Download className="mr-2 h-4 w-4" />Download</DropdownMenuItem>}
-        {(entry.kind === "directory" || entry.kind === "file") && <DropdownMenuItem onClick={() => void createArchive(entry, "zip")}><FileArchive className="mr-2 h-4 w-4" />Compress as ZIP</DropdownMenuItem>}
-        {(entry.kind === "directory" || entry.kind === "file") && <DropdownMenuItem onClick={() => void createArchive(entry, "tar.gz")}><FileArchive className="mr-2 h-4 w-4" />Compress as TAR.GZ</DropdownMenuItem>}
-        {isArchiveEntry(entry) && <DropdownMenuItem onClick={() => void extractArchive(entry)}><FolderInput className="mr-2 h-4 w-4" />Extract archive</DropdownMenuItem>}
+        <DropdownMenuItem onClick={() => void openEntry(entry)}>
+          <Eye className="mr-2 h-4 w-4" />
+          {entry.kind === "directory" ? "Open" : "View / edit"}
+        </DropdownMenuItem>
+        {entry.kind === "file" && (
+          <DropdownMenuItem onClick={() => void downloadEntry(entry)}>
+            <Download className="mr-2 h-4 w-4" />
+            Download
+          </DropdownMenuItem>
+        )}
+        {(entry.kind === "directory" || entry.kind === "file") && (
+          <DropdownMenuItem onClick={() => void createArchive(entry, "zip")}>
+            <FileArchive className="mr-2 h-4 w-4" />
+            Compress as ZIP
+          </DropdownMenuItem>
+        )}
+        {(entry.kind === "directory" || entry.kind === "file") && (
+          <DropdownMenuItem onClick={() => void createArchive(entry, "tar.gz")}>
+            <FileArchive className="mr-2 h-4 w-4" />
+            Compress as TAR.GZ
+          </DropdownMenuItem>
+        )}
+        {isArchiveEntry(entry) && (
+          <DropdownMenuItem onClick={() => void extractArchive(entry)}>
+            <FolderInput className="mr-2 h-4 w-4" />
+            Extract archive
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => openRename(entry)}><Pencil className="mr-2 h-4 w-4" />Rename</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => openTransfer("copy", entry)}><Copy className="mr-2 h-4 w-4" />Copy to…</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => openTransfer("move", entry)}><FolderInput className="mr-2 h-4 w-4" />Move to…</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => openMode(entry)}><Shield className="mr-2 h-4 w-4" />Permissions</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setPropertiesEntry(entry)}><Info className="mr-2 h-4 w-4" />Properties</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => openRename(entry)}>
+          <Pencil className="mr-2 h-4 w-4" />
+          Rename
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => openTransfer("copy", entry)}>
+          <Copy className="mr-2 h-4 w-4" />
+          Copy to…
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => openTransfer("move", entry)}>
+          <FolderInput className="mr-2 h-4 w-4" />
+          Move to…
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => openMode(entry)}>
+          <Shield className="mr-2 h-4 w-4" />
+          Permissions
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setPropertiesEntry(entry)}>
+          <Info className="mr-2 h-4 w-4" />
+          Properties
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeleteEntries([entry])}><Trash2 className="mr-2 h-4 w-4" />Move to trash</DropdownMenuItem>
+        <DropdownMenuItem
+          className="text-destructive focus:text-destructive"
+          onClick={() => setDeleteEntries([entry])}
+        >
+          <Trash2 className="mr-2 h-4 w-4" />
+          Move to trash
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
 
   const contextMenu = (entry: LocalFileEntry) => (
     <ContextMenuContent className="min-w-56">
-      <ContextMenuItem onClick={() => void openEntry(entry)}><Eye className="mr-2 h-4 w-4" />{entry.kind === "directory" ? "Open" : "View / edit"}</ContextMenuItem>
-      {entry.kind === "file" && <ContextMenuItem onClick={() => void downloadEntry(entry)}><Download className="mr-2 h-4 w-4" />Download</ContextMenuItem>}
-      {(entry.kind === "directory" || entry.kind === "file") && <ContextMenuItem onClick={() => void createArchive(entry, "zip")}><FileArchive className="mr-2 h-4 w-4" />Compress as ZIP</ContextMenuItem>}
-      {(entry.kind === "directory" || entry.kind === "file") && <ContextMenuItem onClick={() => void createArchive(entry, "tar.gz")}><FileArchive className="mr-2 h-4 w-4" />Compress as TAR.GZ</ContextMenuItem>}
-      {isArchiveEntry(entry) && <ContextMenuItem onClick={() => void extractArchive(entry)}><FolderInput className="mr-2 h-4 w-4" />Extract archive</ContextMenuItem>}
+      <ContextMenuItem onClick={() => void openEntry(entry)}>
+        <Eye className="mr-2 h-4 w-4" />
+        {entry.kind === "directory" ? "Open" : "View / edit"}
+      </ContextMenuItem>
+      {entry.kind === "file" && (
+        <ContextMenuItem onClick={() => void downloadEntry(entry)}>
+          <Download className="mr-2 h-4 w-4" />
+          Download
+        </ContextMenuItem>
+      )}
+      {(entry.kind === "directory" || entry.kind === "file") && (
+        <ContextMenuItem onClick={() => void createArchive(entry, "zip")}>
+          <FileArchive className="mr-2 h-4 w-4" />
+          Compress as ZIP
+        </ContextMenuItem>
+      )}
+      {(entry.kind === "directory" || entry.kind === "file") && (
+        <ContextMenuItem onClick={() => void createArchive(entry, "tar.gz")}>
+          <FileArchive className="mr-2 h-4 w-4" />
+          Compress as TAR.GZ
+        </ContextMenuItem>
+      )}
+      {isArchiveEntry(entry) && (
+        <ContextMenuItem onClick={() => void extractArchive(entry)}>
+          <FolderInput className="mr-2 h-4 w-4" />
+          Extract archive
+        </ContextMenuItem>
+      )}
       <ContextMenuSeparator />
-      <ContextMenuItem onClick={() => openRename(entry)}><Pencil className="mr-2 h-4 w-4" />Rename</ContextMenuItem>
-      <ContextMenuItem onClick={() => openTransfer("copy", entry)}><Copy className="mr-2 h-4 w-4" />Copy to…</ContextMenuItem>
-      <ContextMenuItem onClick={() => openTransfer("move", entry)}><FolderInput className="mr-2 h-4 w-4" />Move to…</ContextMenuItem>
-      <ContextMenuItem onClick={() => openMode(entry)}><Shield className="mr-2 h-4 w-4" />Permissions</ContextMenuItem>
-      <ContextMenuItem onClick={() => setPropertiesEntry(entry)}><Info className="mr-2 h-4 w-4" />Properties</ContextMenuItem>
+      <ContextMenuItem onClick={() => openRename(entry)}>
+        <Pencil className="mr-2 h-4 w-4" />
+        Rename
+      </ContextMenuItem>
+      <ContextMenuItem onClick={() => openTransfer("copy", entry)}>
+        <Copy className="mr-2 h-4 w-4" />
+        Copy to…
+      </ContextMenuItem>
+      <ContextMenuItem onClick={() => openTransfer("move", entry)}>
+        <FolderInput className="mr-2 h-4 w-4" />
+        Move to…
+      </ContextMenuItem>
+      <ContextMenuItem onClick={() => openMode(entry)}>
+        <Shield className="mr-2 h-4 w-4" />
+        Permissions
+      </ContextMenuItem>
+      <ContextMenuItem onClick={() => setPropertiesEntry(entry)}>
+        <Info className="mr-2 h-4 w-4" />
+        Properties
+      </ContextMenuItem>
       <ContextMenuSeparator />
-      <ContextMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeleteEntries(selectedPaths.has(entry.path) && selectedEntries.length > 1 ? selectedEntries : [entry])}>
-        <Trash2 className="mr-2 h-4 w-4" />{selectedPaths.has(entry.path) && selectedEntries.length > 1 ? `Delete all selected (${selectedEntries.length})` : "Move to trash"}
+      <ContextMenuItem
+        className="text-destructive focus:text-destructive"
+        onClick={() =>
+          setDeleteEntries(
+            selectedPaths.has(entry.path) && selectedEntries.length > 1 ? selectedEntries : [entry],
+          )
+        }
+      >
+        <Trash2 className="mr-2 h-4 w-4" />
+        {selectedPaths.has(entry.path) && selectedEntries.length > 1
+          ? `Delete all selected (${selectedEntries.length})`
+          : "Move to trash"}
       </ContextMenuItem>
     </ContextMenuContent>
   );
@@ -546,11 +749,37 @@ function Explorer() {
       <div className="border-b border-border bg-surface/60 p-2">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1">
-            <Button size="icon" variant="ghost" onClick={() => history.back()} aria-label="Back"><ArrowLeft className="h-4 w-4" /></Button>
-            <Button size="icon" variant="ghost" onClick={() => history.forward()} aria-label="Forward"><ArrowRight className="h-4 w-4" /></Button>
-            <Button size="icon" variant="ghost" disabled={currentPath === "/"} onClick={() => setPath(parentPath(currentPath))} aria-label="Parent"><ArrowUp className="h-4 w-4" /></Button>
-            <Button size="icon" variant="ghost" onClick={() => setPath("/root")} aria-label="Root home"><Home className="h-4 w-4" /></Button>
-            <Button size="icon" variant="ghost" onClick={() => void load()} aria-label="Refresh"><RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} /></Button>
+            <Button size="icon" variant="ghost" onClick={() => history.back()} aria-label="Back">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => history.forward()}
+              aria-label="Forward"
+            >
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              disabled={currentPath === "/"}
+              onClick={() => setPath(parentPath(currentPath))}
+              aria-label="Parent"
+            >
+              <ArrowUp className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setPath("/root")}
+              aria-label="Root home"
+            >
+              <Home className="h-4 w-4" />
+            </Button>
+            <Button size="icon" variant="ghost" onClick={() => void load()} aria-label="Refresh">
+              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            </Button>
           </div>
 
           <form
@@ -560,17 +789,50 @@ function Explorer() {
               setPath(pathInput);
             }}
           >
-            <Input value={pathInput} onChange={(event) => setPathInput(event.target.value)} className="font-mono text-xs" aria-label="Server path" />
+            <Input
+              value={pathInput}
+              onChange={(event) => setPathInput(event.target.value)}
+              className="font-mono text-xs"
+              aria-label="Server path"
+            />
           </form>
 
           <div className="relative min-w-[190px]">
             <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input value={q} onChange={(event) => setSearch(event.target.value)} placeholder="Filter current directory" className="pl-8" />
+            <Input
+              value={q}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Filter current directory"
+              className="pl-8"
+            />
           </div>
 
-          <Button variant="outline" size="sm" onClick={() => { setCreateKind("file"); setCreateName(""); }}><FilePlus2 className="mr-1.5 h-4 w-4" />New file</Button>
-          <Button variant="outline" size="sm" onClick={() => { setCreateKind("directory"); setCreateName(""); }}><FolderPlus className="mr-1.5 h-4 w-4" />New folder</Button>
-          <Button size="sm" onClick={() => uploadInput.current?.click()}><UploadCloud className="mr-1.5 h-4 w-4" />Upload</Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setCreateKind("file");
+              setCreateName("");
+            }}
+          >
+            <FilePlus2 className="mr-1.5 h-4 w-4" />
+            New file
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setCreateKind("directory");
+              setCreateName("");
+            }}
+          >
+            <FolderPlus className="mr-1.5 h-4 w-4" />
+            New folder
+          </Button>
+          <Button size="sm" onClick={() => uploadInput.current?.click()}>
+            <UploadCloud className="mr-1.5 h-4 w-4" />
+            Upload
+          </Button>
           <input
             ref={uploadInput}
             type="file"
@@ -585,16 +847,25 @@ function Explorer() {
               }
               const files = event.target.files;
               const controller = new AbortController();
-              setOperationProgress({ label: `Uploading ${files.length} file(s)`, percent: 0, cancel: () => controller.abort() });
+              setOperationProgress({
+                label: `Uploading ${files.length} file(s)`,
+                percent: 0,
+                cancel: () => controller.abort(),
+              });
               try {
-                await localApi.upload(currentPath, files, (value: ProgressState) => {
-                  setOperationProgress({
-                    label: `Uploading ${files.length} file(s)`,
-                    percent: value.percent,
-                    detail: `${formatBytes(value.loaded)} / ${formatBytes(value.total)}${value.detail ? ` · ${value.detail}` : ""}`,
-                    cancel: () => controller.abort(),
-                  });
-                }, controller.signal);
+                await localApi.upload(
+                  currentPath,
+                  files,
+                  (value: ProgressState) => {
+                    setOperationProgress({
+                      label: `Uploading ${files.length} file(s)`,
+                      percent: value.percent,
+                      detail: `${formatBytes(value.loaded)} / ${formatBytes(value.total)}${value.detail ? ` · ${value.detail}` : ""}`,
+                      cancel: () => controller.abort(),
+                    });
+                  },
+                  controller.signal,
+                );
                 toast.success(`${files.length} file(s) uploaded`);
                 await load();
               } catch (cause) {
@@ -618,7 +889,11 @@ function Explorer() {
                     {index === crumbs.length - 1 ? (
                       <BreadcrumbPage className="font-mono text-xs">{crumb.label}</BreadcrumbPage>
                     ) : (
-                      <BreadcrumbLink asChild><button className="font-mono text-xs" onClick={() => setPath(crumb.path)}>{crumb.label}</button></BreadcrumbLink>
+                      <BreadcrumbLink asChild>
+                        <button className="font-mono text-xs" onClick={() => setPath(crumb.path)}>
+                          {crumb.label}
+                        </button>
+                      </BreadcrumbLink>
                     )}
                   </BreadcrumbItem>
                 </span>
@@ -626,27 +901,58 @@ function Explorer() {
             </BreadcrumbList>
           </Breadcrumb>
           <div className="flex items-center gap-2">
-            <div className="flex items-center rounded-md border border-border bg-background p-0.5" aria-label="Explorer layout">
-              <Button size="icon" variant={layout === "list" ? "secondary" : "ghost"} className="h-7 w-7 rounded-sm" onClick={() => setLayout("list")} aria-label="List layout" title="List layout"><List className="h-4 w-4" /></Button>
-              <Button size="icon" variant={layout === "grid" ? "secondary" : "ghost"} className="h-7 w-7 rounded-sm" onClick={() => setLayout("grid")} aria-label="Mosaic layout" title="Mosaic layout"><Grid2X2 className="h-4 w-4" /></Button>
+            <div
+              className="flex items-center rounded-md border border-border bg-background p-0.5"
+              aria-label="Explorer layout"
+            >
+              <Button
+                size="icon"
+                variant={layout === "list" ? "secondary" : "ghost"}
+                className="h-7 w-7 rounded-sm"
+                onClick={() => setLayout("list")}
+                aria-label="List layout"
+                title="List layout"
+              >
+                <List className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant={layout === "grid" ? "secondary" : "ghost"}
+                className="h-7 w-7 rounded-sm"
+                onClick={() => setLayout("grid")}
+                aria-label="Mosaic layout"
+                title="Mosaic layout"
+              >
+                <Grid2X2 className="h-4 w-4" />
+              </Button>
             </div>
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Checkbox checked={showHidden} onCheckedChange={(value) => setShowHidden(Boolean(value))} />
+              <Checkbox
+                checked={showHidden}
+                onCheckedChange={(value) => setShowHidden(Boolean(value))}
+              />
               Show hidden files
             </label>
           </div>
         </div>
-
       </div>
 
       {operationProgress && (
         <div className="border-b border-border bg-surface/70 px-3 py-2">
           <div className="mb-1.5 flex items-center gap-3 text-xs">
             <span className="min-w-0 flex-1 truncate font-medium">{operationProgress.label}</span>
-            <span className="shrink-0 font-mono text-muted-foreground">{operationProgress.detail || `${operationProgress.percent}%`}</span>
+            <span className="shrink-0 font-mono text-muted-foreground">
+              {operationProgress.detail || `${operationProgress.percent}%`}
+            </span>
             {operationProgress.cancel && (
-              <Button size="sm" variant="outline" className="h-7 shrink-0 text-xs" onClick={operationProgress.cancel}>
-                <CircleX className="mr-1 h-3.5 w-3.5" />Cancel
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 shrink-0 text-xs"
+                onClick={operationProgress.cancel}
+              >
+                <CircleX className="mr-1 h-3.5 w-3.5" />
+                Cancel
               </Button>
             )}
           </div>
@@ -655,14 +961,30 @@ function Explorer() {
       )}
 
       {currentPath !== realPath && !loading && (
-        <Alert className="m-3 mb-0"><AlertDescription>Resolved path: <span className="font-mono">{realPath}</span></AlertDescription></Alert>
+        <Alert className="m-3 mb-0">
+          <AlertDescription>
+            Resolved path: <span className="font-mono">{realPath}</span>
+          </AlertDescription>
+        </Alert>
       )}
-      {error && <Alert variant="destructive" className="m-3 mb-0"><AlertDescription>{error}</AlertDescription></Alert>}
+      {error && (
+        <Alert variant="destructive" className="m-3 mb-0">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-      <div className="min-h-0 flex-1 overflow-auto p-4" onClick={(event) => { if (event.target === event.currentTarget) clearSelection(); }}>
+      <div
+        className="min-h-0 flex-1 overflow-auto p-4"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) clearSelection();
+        }}
+      >
         {loading ? (
           <div className="grid h-56 place-items-center text-sm text-muted-foreground">
-            <div className="text-center"><Loader2 className="mx-auto mb-2 h-6 w-6 animate-spin" />Loading {currentPath}</div>
+            <div className="text-center">
+              <Loader2 className="mx-auto mb-2 h-6 w-6 animate-spin" />
+              Loading {currentPath}
+            </div>
           </div>
         ) : !error && visibleEntries.length === 0 ? (
           <div className="grid h-64 place-items-center rounded-xl border border-dashed border-border bg-muted/10 text-center">
@@ -671,7 +993,9 @@ function Explorer() {
                 <Folder className="h-9 w-9 fill-primary/15 text-primary" />
               </div>
               <p className="font-medium">This directory is empty</p>
-              <p className="mt-1 text-sm text-muted-foreground">Create a file, create a folder or upload something here.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Create a file, create a folder or upload something here.
+              </p>
             </div>
           </div>
         ) : layout === "grid" ? (
@@ -694,27 +1018,69 @@ function Explorer() {
                         "focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25",
                         active && "border-primary/60 bg-primary/8 ring-1 ring-primary/30",
                       )}
-                      onClick={(event) => selectEntry(entry, { additive: event.ctrlKey || event.metaKey, range: event.shiftKey })}
+                      onClick={(event) =>
+                        selectEntry(entry, {
+                          additive: event.ctrlKey || event.metaKey,
+                          range: event.shiftKey,
+                        })
+                      }
                       onDoubleClick={() => void openEntry(entry)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter") void openEntry(entry);
-                        if (event.key === " ") { event.preventDefault(); toggleEntry(entry); }
+                        if (event.key === " ") {
+                          event.preventDefault();
+                          toggleEntry(entry);
+                        }
                       }}
                     >
-                      <div className="absolute left-2 top-2 z-10" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
-                        <Checkbox checked={active} onCheckedChange={() => toggleEntry(entry)} aria-label={`Select ${entry.name}`} />
+                      <div
+                        className="absolute left-2 top-2 z-10"
+                        onClick={(event) => event.stopPropagation()}
+                        onDoubleClick={(event) => event.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={active}
+                          onCheckedChange={() => toggleEntry(entry)}
+                          aria-label={`Select ${entry.name}`}
+                        />
                       </div>
-                      <div className="absolute right-1.5 top-1.5 z-10 opacity-70 group-hover:opacity-100">{dropdownMenu(entry)}</div>
+                      <div className="absolute right-1.5 top-1.5 z-10 opacity-70 group-hover:opacity-100">
+                        {dropdownMenu(entry)}
+                      </div>
                       <div className="flex flex-1 flex-col items-center justify-center px-1 pt-4 text-center">
-                        <div className={cn("mb-2.5 grid h-14 w-14 place-items-center rounded-xl border", visual.tone)}>
+                        <div
+                          className={cn(
+                            "mb-2.5 grid h-14 w-14 place-items-center rounded-xl border",
+                            visual.tone,
+                          )}
+                        >
                           <Icon className={cn("h-8 w-8", visual.icon)} />
                         </div>
-                        <div className="w-full truncate text-sm font-medium no-underline group-hover:no-underline" title={entry.name}>{entry.name}</div>
-                        {entry.linkTarget && <div className="mt-1 w-full truncate font-mono text-[10px] text-muted-foreground no-underline" title={entry.linkTarget}>→ {entry.linkTarget}</div>}
+                        <div
+                          className="w-full truncate text-sm font-medium no-underline group-hover:no-underline"
+                          title={entry.name}
+                        >
+                          {entry.name}
+                        </div>
+                        {entry.linkTarget && (
+                          <div
+                            className="mt-1 w-full truncate font-mono text-[10px] text-muted-foreground no-underline"
+                            title={entry.linkTarget}
+                          >
+                            → {entry.linkTarget}
+                          </div>
+                        )}
                       </div>
                       <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/65 pt-2 text-[10px] text-muted-foreground">
-                        <span className="truncate">{entry.kind === "directory" ? "Folder" : formatBytes(entry.size)}</span>
-                        <Badge variant="outline" className="h-5 px-1.5 font-mono text-[9px] font-normal">{entry.mode}</Badge>
+                        <span className="truncate">
+                          {entry.kind === "directory" ? "Folder" : formatBytes(entry.size)}
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className="h-5 px-1.5 font-mono text-[9px] font-normal"
+                        >
+                          {entry.mode}
+                        </Badge>
                       </div>
                     </article>
                   </ContextMenuTrigger>
@@ -728,7 +1094,13 @@ function Explorer() {
             <div className="grid grid-cols-[34px_minmax(0,1fr)_90px_42px] items-center gap-3 border-b border-border bg-muted/35 px-3 py-2 text-[11px] font-medium text-muted-foreground md:grid-cols-[34px_minmax(0,1fr)_100px_86px_80px_150px_42px]">
               <Checkbox
                 checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
-                onCheckedChange={() => setSelectedPaths(allVisibleSelected ? new Set() : new Set(visibleEntries.map((entry) => entry.path)))}
+                onCheckedChange={() =>
+                  setSelectedPaths(
+                    allVisibleSelected
+                      ? new Set()
+                      : new Set(visibleEntries.map((entry) => entry.path)),
+                  )
+                }
                 aria-label="Select all visible items"
               />
               <span>Name</span>
@@ -757,30 +1129,78 @@ function Explorer() {
                           "focus-visible:bg-muted/45 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30",
                           active && "bg-primary/10",
                         )}
-                        onClick={(event) => selectEntry(entry, { additive: event.ctrlKey || event.metaKey, range: event.shiftKey })}
+                        onClick={(event) =>
+                          selectEntry(entry, {
+                            additive: event.ctrlKey || event.metaKey,
+                            range: event.shiftKey,
+                          })
+                        }
                         onDoubleClick={() => void openEntry(entry)}
                         onKeyDown={(event) => {
                           if (event.key === "Enter") void openEntry(entry);
-                          if (event.key === " ") { event.preventDefault(); toggleEntry(entry); }
+                          if (event.key === " ") {
+                            event.preventDefault();
+                            toggleEntry(entry);
+                          }
                         }}
                       >
-                        <div onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
-                          <Checkbox checked={active} onCheckedChange={() => toggleEntry(entry)} aria-label={`Select ${entry.name}`} />
+                        <div
+                          onClick={(event) => event.stopPropagation()}
+                          onDoubleClick={(event) => event.stopPropagation()}
+                        >
+                          <Checkbox
+                            checked={active}
+                            onCheckedChange={() => toggleEntry(entry)}
+                            aria-label={`Select ${entry.name}`}
+                          />
                         </div>
                         <div className="flex min-w-0 items-center gap-3 no-underline">
-                          <div className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-md border", visual.tone)}>
+                          <div
+                            className={cn(
+                              "grid h-8 w-8 shrink-0 place-items-center rounded-md border",
+                              visual.tone,
+                            )}
+                          >
                             <Icon className={cn("h-5 w-5", visual.icon)} />
                           </div>
                           <div className="min-w-0 no-underline">
-                            <div className="truncate text-sm font-medium no-underline group-hover:no-underline" title={entry.name}>{entry.name}</div>
-                            {entry.linkTarget && <div className="truncate font-mono text-[10px] text-muted-foreground no-underline" title={entry.linkTarget}>→ {entry.linkTarget}</div>}
+                            <div
+                              className="truncate text-sm font-medium no-underline group-hover:no-underline"
+                              title={entry.name}
+                            >
+                              {entry.name}
+                            </div>
+                            {entry.linkTarget && (
+                              <div
+                                className="truncate font-mono text-[10px] text-muted-foreground no-underline"
+                                title={entry.linkTarget}
+                              >
+                                → {entry.linkTarget}
+                              </div>
+                            )}
                           </div>
                         </div>
-                        <span className="truncate text-right text-xs text-muted-foreground">{entry.kind === "directory" ? "—" : formatBytes(entry.size)}</span>
-                        <Badge variant="outline" className="hidden h-5 w-fit px-1.5 font-mono text-[10px] font-normal md:inline-flex">{entry.mode}</Badge>
-                        <span className="hidden font-mono text-xs text-muted-foreground md:block">{entry.uid}:{entry.gid}</span>
-                        <span className="hidden truncate text-xs text-muted-foreground md:block">{formatDate(entry.modifiedAt)}</span>
-                        <div className="flex justify-end" onDoubleClick={(event) => event.stopPropagation()}>{dropdownMenu(entry)}</div>
+                        <span className="truncate text-right text-xs text-muted-foreground">
+                          {entry.kind === "directory" ? "—" : formatBytes(entry.size)}
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className="hidden h-5 w-fit px-1.5 font-mono text-[10px] font-normal md:inline-flex"
+                        >
+                          {entry.mode}
+                        </Badge>
+                        <span className="hidden font-mono text-xs text-muted-foreground md:block">
+                          {entry.uid}:{entry.gid}
+                        </span>
+                        <span className="hidden truncate text-xs text-muted-foreground md:block">
+                          {formatDate(entry.modifiedAt)}
+                        </span>
+                        <div
+                          className="flex justify-end"
+                          onDoubleClick={(event) => event.stopPropagation()}
+                        >
+                          {dropdownMenu(entry)}
+                        </div>
                       </article>
                     </ContextMenuTrigger>
                     {contextMenu(entry)}
@@ -793,89 +1213,207 @@ function Explorer() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-surface/60 px-3 py-1.5 text-[11px] text-muted-foreground">
-        <span>{visibleEntries.length} item(s) · {selectedEntries.length} selected · Ctrl/⌘ and Shift supported · right-click for actions</span>
-        <span className="font-mono">{selectedEntries.length === 1 ? selectedEntries[0].path : currentPath}</span>
+        <span>
+          {visibleEntries.length} item(s) · {selectedEntries.length} selected · Ctrl/⌘ and Shift
+          supported · right-click for actions
+        </span>
+        <span className="font-mono">
+          {selectedEntries.length === 1 ? selectedEntries[0].path : currentPath}
+        </span>
       </div>
 
       <Dialog open={Boolean(createKind)} onOpenChange={(open) => !open && setCreateKind(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Create {createKind === "directory" ? "directory" : "file"}</DialogTitle><DialogDescription>It will be created inside <span className="font-mono">{currentPath}</span>.</DialogDescription></DialogHeader>
-          <Input autoFocus value={createName} onChange={(event) => setCreateName(event.target.value)} placeholder={createKind === "directory" ? "new-directory" : "new-file.txt"} />
-          <DialogFooter><Button variant="outline" onClick={() => setCreateKind(null)}>Cancel</Button><Button disabled={!createName.trim()} onClick={async () => {
-            const ok = await mutate(
-              () => createKind === "directory" ? localApi.createDirectory(currentPath, createName) : localApi.createFile(currentPath, createName),
-              `${createName} created`,
-            );
-            if (ok) setCreateKind(null);
-          }}>Create</Button></DialogFooter>
+          <DialogHeader>
+            <DialogTitle>Create {createKind === "directory" ? "directory" : "file"}</DialogTitle>
+            <DialogDescription>
+              It will be created inside <span className="font-mono">{currentPath}</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={createName}
+            onChange={(event) => setCreateName(event.target.value)}
+            placeholder={createKind === "directory" ? "new-directory" : "new-file.txt"}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateKind(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!createName.trim()}
+              onClick={async () => {
+                const ok = await mutate(
+                  () =>
+                    createKind === "directory"
+                      ? localApi.createDirectory(currentPath, createName)
+                      : localApi.createFile(currentPath, createName),
+                  `${createName} created`,
+                );
+                if (ok) setCreateKind(null);
+              }}
+            >
+              Create
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={Boolean(renameEntry)} onOpenChange={(open) => !open && setRenameEntry(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Rename</DialogTitle><DialogDescription>Rename <span className="font-mono">{renameEntry?.path}</span>.</DialogDescription></DialogHeader>
-          <Input autoFocus value={renameName} onChange={(event) => setRenameName(event.target.value)} />
-          <DialogFooter><Button variant="outline" onClick={() => setRenameEntry(null)}>Cancel</Button><Button disabled={!renameName.trim()} onClick={async () => {
-            if (!renameEntry) return;
-            const ok = await mutate(() => localApi.rename(renameEntry.path, renameName), "Item renamed");
-            if (ok) setRenameEntry(null);
-          }}>Rename</Button></DialogFooter>
+          <DialogHeader>
+            <DialogTitle>Rename</DialogTitle>
+            <DialogDescription>
+              Rename <span className="font-mono">{renameEntry?.path}</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={renameName}
+            onChange={(event) => setRenameName(event.target.value)}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameEntry(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!renameName.trim()}
+              onClick={async () => {
+                if (!renameEntry) return;
+                const ok = await mutate(
+                  () => localApi.rename(renameEntry.path, renameName),
+                  "Item renamed",
+                );
+                if (ok) setRenameEntry(null);
+              }}
+            >
+              Rename
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={Boolean(transfer)} onOpenChange={(open) => !open && setTransfer(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{transfer?.kind === "copy" ? "Copy" : "Move"} item</DialogTitle><DialogDescription>Enter an existing destination directory.</DialogDescription></DialogHeader>
-          <div className="grid gap-2"><span className="truncate font-mono text-xs text-muted-foreground">Source: {transfer?.entry.path}</span><Input value={destination} onChange={(event) => setDestination(event.target.value)} className="font-mono" /></div>
-          <DialogFooter><Button variant="outline" onClick={() => setTransfer(null)}>Cancel</Button><Button onClick={async () => {
-            if (!transfer) return;
-            const ok = await mutate(
-              () => {
-                const label = transfer.kind === "copy" ? `Copying ${transfer.entry.name}` : `Moving ${transfer.entry.name}`;
-                setOperationProgress({ label, percent: 0 });
-                const update = (job: OperationJob) => setOperationProgress({
-                  label,
-                  percent: job.progress,
-                  detail: job.currentItem ? `${job.progress}% · ${job.currentItem}` : `${job.progress}%`,
-                });
-                return transfer.kind === "copy"
-                  ? localApi.copy(transfer.entry.path, destination, update)
-                  : localApi.move(transfer.entry.path, destination, update);
-              },
-              transfer.kind === "copy" ? "Item copied" : "Item moved",
-            );
-            setTimeout(() => setOperationProgress(null), 800);
-            if (ok) setTransfer(null);
-          }}>{transfer?.kind === "copy" ? "Copy" : "Move"}</Button></DialogFooter>
+          <DialogHeader>
+            <DialogTitle>{transfer?.kind === "copy" ? "Copy" : "Move"} item</DialogTitle>
+            <DialogDescription>Enter an existing destination directory.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <span className="truncate font-mono text-xs text-muted-foreground">
+              Source: {transfer?.entry.path}
+            </span>
+            <Input
+              value={destination}
+              onChange={(event) => setDestination(event.target.value)}
+              className="font-mono"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTransfer(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!transfer) return;
+                const ok = await mutate(
+                  () => {
+                    const label =
+                      transfer.kind === "copy"
+                        ? `Copying ${transfer.entry.name}`
+                        : `Moving ${transfer.entry.name}`;
+                    setOperationProgress({ label, percent: 0 });
+                    const update = (job: OperationJob) =>
+                      setOperationProgress({
+                        label,
+                        percent: job.progress,
+                        detail: job.currentItem
+                          ? `${job.progress}% · ${job.currentItem}`
+                          : `${job.progress}%`,
+                      });
+                    return transfer.kind === "copy"
+                      ? localApi.copy(transfer.entry.path, destination, update)
+                      : localApi.move(transfer.entry.path, destination, update);
+                  },
+                  transfer.kind === "copy" ? "Item copied" : "Item moved",
+                );
+                setTimeout(() => setOperationProgress(null), 800);
+                if (ok) setTransfer(null);
+              }}
+            >
+              {transfer?.kind === "copy" ? "Copy" : "Move"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={Boolean(modeEntry)} onOpenChange={(open) => !open && setModeEntry(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Change permissions</DialogTitle><DialogDescription>Enter an octal mode such as 0644, 0755 or 0600.</DialogDescription></DialogHeader>
-          <Input value={mode} onChange={(event) => setMode(event.target.value)} className="font-mono" />
-          <DialogFooter><Button variant="outline" onClick={() => setModeEntry(null)}>Cancel</Button><Button onClick={async () => {
-            if (!modeEntry) return;
-            const ok = await mutate(() => localApi.chmod(modeEntry.path, mode), "Permissions changed");
-            if (ok) setModeEntry(null);
-          }}>Apply</Button></DialogFooter>
+          <DialogHeader>
+            <DialogTitle>Change permissions</DialogTitle>
+            <DialogDescription>Enter an octal mode such as 0644, 0755 or 0600.</DialogDescription>
+          </DialogHeader>
+          <Input
+            value={mode}
+            onChange={(event) => setMode(event.target.value)}
+            className="font-mono"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModeEntry(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!modeEntry) return;
+                const ok = await mutate(
+                  () => localApi.chmod(modeEntry.path, mode),
+                  "Permissions changed",
+                );
+                if (ok) setModeEntry(null);
+              }}
+            >
+              Apply
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(propertiesEntry)} onOpenChange={(open) => !open && setPropertiesEntry(null)}>
+      <Dialog
+        open={Boolean(propertiesEntry)}
+        onOpenChange={(open) => !open && setPropertiesEntry(null)}
+      >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Info className="h-4 w-4" />Properties</DialogTitle>
-            <DialogDescription className="truncate font-mono">{propertiesEntry?.path}</DialogDescription>
+            <DialogTitle className="flex items-center gap-2">
+              <Info className="h-4 w-4" />
+              Properties
+            </DialogTitle>
+            <DialogDescription className="truncate font-mono">
+              {propertiesEntry?.path}
+            </DialogDescription>
           </DialogHeader>
           {propertiesEntry && (
             <div className="overflow-hidden rounded-lg border border-border">
               <dl className="divide-y divide-border text-sm">
                 {[
                   ["Name", propertiesEntry.name],
-                  ["Type", propertiesEntry.kind === "directory" ? "Directory" : propertiesEntry.kind === "symlink" ? "Symbolic link" : propertiesEntry.kind === "file" ? "File" : "Other"],
+                  [
+                    "Type",
+                    propertiesEntry.kind === "directory"
+                      ? "Directory"
+                      : propertiesEntry.kind === "symlink"
+                        ? "Symbolic link"
+                        : propertiesEntry.kind === "file"
+                          ? "File"
+                          : "Other",
+                  ],
                   ["MIME type", propertiesEntry.mime || "—"],
-                  ["Size", propertiesEntry.kind === "directory" ? "—" : `${formatBytes(propertiesEntry.size)} (${propertiesEntry.size.toLocaleString()} bytes)`],
+                  [
+                    "Size",
+                    propertiesEntry.kind === "directory"
+                      ? "—"
+                      : `${formatBytes(propertiesEntry.size)} (${propertiesEntry.size.toLocaleString()} bytes)`,
+                  ],
                   ["Permissions", propertiesEntry.mode],
                   ["Owner", `${propertiesEntry.uid}:${propertiesEntry.gid}`],
                   ["Modified", formatDate(propertiesEntry.modifiedAt)],
@@ -884,79 +1422,160 @@ function Explorer() {
                   ["Readable", propertiesEntry.readable ? "Yes" : "No"],
                   ["Writable", propertiesEntry.writable ? "Yes" : "No"],
                   ["Hidden", propertiesEntry.hidden ? "Yes" : "No"],
-                  ...(propertiesEntry.linkTarget ? [["Link target", propertiesEntry.linkTarget]] : []),
+                  ...(propertiesEntry.linkTarget
+                    ? [["Link target", propertiesEntry.linkTarget]]
+                    : []),
                 ].map(([label, value]) => (
-                  <div key={label} className="grid grid-cols-[140px_minmax(0,1fr)] gap-4 px-4 py-2.5">
+                  <div
+                    key={label}
+                    className="grid grid-cols-[140px_minmax(0,1fr)] gap-4 px-4 py-2.5"
+                  >
                     <dt className="text-muted-foreground">{label}</dt>
-                    <dd className={cn("min-w-0 break-all", ["Permissions", "Owner", "Link target"].includes(label) && "font-mono")}>{value}</dd>
+                    <dd
+                      className={cn(
+                        "min-w-0 break-all",
+                        ["Permissions", "Owner", "Link target"].includes(label) && "font-mono",
+                      )}
+                    >
+                      {value}
+                    </dd>
                   </div>
                 ))}
               </dl>
             </div>
           )}
-          <DialogFooter><Button onClick={() => setPropertiesEntry(null)}>Close</Button></DialogFooter>
+          <DialogFooter>
+            <Button onClick={() => setPropertiesEntry(null)}>Close</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={Boolean(previewEntry)} onOpenChange={(open) => !open && setPreviewEntry(null)}>
         <DialogContent className="flex h-[85vh] max-w-5xl flex-col">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><FileIcon className="h-4 w-4" />{previewEntry?.name}</DialogTitle><DialogDescription className="truncate font-mono">{previewEntry?.path}</DialogDescription></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileIcon className="h-4 w-4" />
+              {previewEntry?.name}
+            </DialogTitle>
+            <DialogDescription className="truncate font-mono">
+              {previewEntry?.path}
+            </DialogDescription>
+          </DialogHeader>
           <div className="min-h-0 flex-1">
             {previewLoading ? (
-              <div className="grid h-full place-items-center text-sm text-muted-foreground"><Loader2 className="mb-2 h-5 w-5 animate-spin" />Loading file…</div>
+              <div className="grid h-full place-items-center text-sm text-muted-foreground">
+                <Loader2 className="mb-2 h-5 w-5 animate-spin" />
+                Loading file…
+              </div>
             ) : previewError ? (
-              <div className="grid h-full place-items-center p-8 text-center"><div><HardDriveUpload className="mx-auto mb-3 h-8 w-8 text-muted-foreground" /><p className="font-medium">Text preview unavailable</p><p className="mt-1 max-w-lg text-sm text-muted-foreground">{previewError}</p>{previewEntry?.kind === "file" && <Button className="mt-4" variant="outline" onClick={() => void downloadEntry(previewEntry)}><Download className="mr-2 h-4 w-4" />Download file</Button>}</div></div>
+              <div className="grid h-full place-items-center p-8 text-center">
+                <div>
+                  <HardDriveUpload className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+                  <p className="font-medium">Text preview unavailable</p>
+                  <p className="mt-1 max-w-lg text-sm text-muted-foreground">{previewError}</p>
+                  {previewEntry?.kind === "file" && (
+                    <Button
+                      className="mt-4"
+                      variant="outline"
+                      onClick={() => void downloadEntry(previewEntry)}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download file
+                    </Button>
+                  )}
+                </div>
+              </div>
             ) : (
-              <textarea value={editorContent} onChange={(event) => setEditorContent(event.target.value)} spellCheck={false} className="h-full w-full resize-none rounded-md border border-border bg-[oklch(0.14_0.005_260)] p-4 font-mono text-[13px] leading-relaxed text-[oklch(0.92_0.005_250)] outline-none focus:ring-1 focus:ring-ring" />
+              <textarea
+                value={editorContent}
+                onChange={(event) => setEditorContent(event.target.value)}
+                spellCheck={false}
+                className="h-full w-full resize-none rounded-md border border-border bg-[oklch(0.14_0.005_260)] p-4 font-mono text-[13px] leading-relaxed text-[oklch(0.92_0.005_250)] outline-none focus:ring-1 focus:ring-ring"
+              />
             )}
           </div>
           <DialogFooter className="items-center sm:justify-between">
             <span className="text-xs text-muted-foreground">Maximum editable size: 5 MB</span>
-            <div className="flex gap-2"><Button variant="outline" onClick={() => setPreviewEntry(null)}>Close</Button><Button disabled={Boolean(previewError) || previewLoading || saving} onClick={async () => {
-              if (!previewEntry) return;
-              setSaving(true);
-              try {
-                await localApi.save(previewEntry.path, editorContent);
-                toast.success("File saved");
-                await load();
-              } catch (cause) {
-                toast.error(cause instanceof Error ? cause.message : "Save failed");
-              } finally {
-                setSaving(false);
-              }
-            }}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Save</Button></div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setPreviewEntry(null)}>
+                Close
+              </Button>
+              <Button
+                disabled={Boolean(previewError) || previewLoading || saving}
+                onClick={async () => {
+                  if (!previewEntry) return;
+                  setSaving(true);
+                  try {
+                    await localApi.save(previewEntry.path, editorContent);
+                    toast.success("File saved");
+                    await load();
+                  } catch (cause) {
+                    toast.error(cause instanceof Error ? cause.message : "Save failed");
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+              >
+                {saving ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 h-4 w-4" />
+                )}
+                Save
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={deleteEntries.length > 0} onOpenChange={(open) => !open && setDeleteEntries([])}>
+      <AlertDialog
+        open={deleteEntries.length > 0}
+        onOpenChange={(open) => !open && setDeleteEntries([])}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Move {deleteEntries.length > 1 ? `${deleteEntries.length} items` : "item"} to trash?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Move {deleteEntries.length > 1 ? `${deleteEntries.length} items` : "item"} to trash?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              {deleteEntries.length === 1 ? <span className="font-mono">{deleteEntries[0]?.path}</span> : "All selected files and folders"} will be moved to the wFileManager trash. They can be restored later from the Trash page.
+              {deleteEntries.length === 1 ? (
+                <span className="font-mono">{deleteEntries[0]?.path}</span>
+              ) : (
+                "All selected files and folders"
+              )}{" "}
+              will be moved to the wFileManager trash. They can be restored later from the Trash
+              page.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
-              const pending = [...deleteEntries];
-              if (!pending.length) return;
-              const label = `Moving ${pending.length} item(s) to trash`;
-              const ok = await mutate(async () => {
-                for (let index = 0; index < pending.length; index += 1) {
-                  const entry = pending[index];
-                  setOperationProgress({ label, percent: Math.round((index / pending.length) * 100), detail: entry.name });
-                  await localApi.trash.move(entry.path);
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                const pending = [...deleteEntries];
+                if (!pending.length) return;
+                const label = `Moving ${pending.length} item(s) to trash`;
+                const ok = await mutate(async () => {
+                  for (let index = 0; index < pending.length; index += 1) {
+                    const entry = pending[index];
+                    setOperationProgress({
+                      label,
+                      percent: Math.round((index / pending.length) * 100),
+                      detail: entry.name,
+                    });
+                    await localApi.trash.move(entry.path);
+                  }
+                  setOperationProgress({ label, percent: 100, detail: "Moved to trash" });
+                }, `${pending.length} item(s) moved to trash`);
+                setTimeout(() => setOperationProgress(null), 650);
+                if (ok) {
+                  setDeleteEntries([]);
+                  clearSelection();
                 }
-                setOperationProgress({ label, percent: 100, detail: "Moved to trash" });
-              }, `${pending.length} item(s) moved to trash`);
-              setTimeout(() => setOperationProgress(null), 650);
-              if (ok) {
-                setDeleteEntries([]);
-                clearSelection();
-              }
-            }}>Move to trash</AlertDialogAction>
+              }}
+            >
+              Move to trash
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -974,14 +1593,18 @@ function Explorer() {
             {extractPlan?.inspection.multipleTopLevel && (
               <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
                 <p className="font-medium">Several first-level items will be extracted.</p>
-                <p className="mt-1 text-muted-foreground">Using the current directory will place them directly beside the archive.</p>
+                <p className="mt-1 text-muted-foreground">
+                  Using the current directory will place them directly beside the archive.
+                </p>
               </div>
             )}
 
             {(extractPlan?.inspection.defaultConflicts.length || 0) > 0 && (
               <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
                 <p className="font-medium">Existing items were detected.</p>
-                <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{extractPlan?.inspection.defaultConflicts.join(", ")}</p>
+                <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                  {extractPlan?.inspection.defaultConflicts.join(", ")}
+                </p>
               </div>
             )}
 
@@ -1001,14 +1624,24 @@ function Explorer() {
             {extractMode === "folder" && (
               <div className="grid gap-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Folder name</label>
-                <Input value={extractFolderName} onChange={(event) => setExtractFolderName(event.target.value)} className="font-mono" />
+                <Input
+                  value={extractFolderName}
+                  onChange={(event) => setExtractFolderName(event.target.value)}
+                  className="font-mono"
+                />
               </div>
             )}
 
             {extractMode === "custom" && (
               <div className="grid gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Destination path</label>
-                <Input value={extractDestination} onChange={(event) => setExtractDestination(event.target.value)} className="font-mono" />
+                <label className="text-xs font-medium text-muted-foreground">
+                  Destination path
+                </label>
+                <Input
+                  value={extractDestination}
+                  onChange={(event) => setExtractDestination(event.target.value)}
+                  className="font-mono"
+                />
               </div>
             )}
 
@@ -1026,9 +1659,14 @@ function Explorer() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setExtractPlan(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setExtractPlan(null)}>
+              Cancel
+            </Button>
             <Button
-              disabled={(extractMode === "folder" && !extractFolderName.trim()) || (extractMode === "custom" && !extractDestination.trim())}
+              disabled={
+                (extractMode === "folder" && !extractFolderName.trim()) ||
+                (extractMode === "custom" && !extractDestination.trim())
+              }
               onClick={() => void confirmExtraction(extractMode)}
             >
               Extract

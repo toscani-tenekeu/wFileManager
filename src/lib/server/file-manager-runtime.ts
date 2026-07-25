@@ -4,7 +4,9 @@ import { constants as fsConstants } from "node:fs";
 
 const COMMON_LOCATIONS = ["/", "/root", "/etc", "/var/www", "/opt"] as const;
 const MAX_TEXT_BYTES = Number(process.env.WFILEMANAGER_MAX_TEXT_BYTES || 5 * 1024 * 1024);
-const MAX_UPLOAD_BYTES = Number(process.env.WFILEMANAGER_MAX_UPLOAD_BYTES || 10 * 1024 * 1024 * 1024);
+const MAX_UPLOAD_BYTES = Number(
+  process.env.WFILEMANAGER_MAX_UPLOAD_BYTES || 10 * 1024 * 1024 * 1024,
+);
 
 async function osRelease() {
   const result: Record<string, string> = {};
@@ -23,11 +25,24 @@ async function osRelease() {
 
 async function locationStatus(path: string) {
   const info = await stat(path).catch(() => null);
-  if (!info?.isDirectory()) return { path, exists: false, readable: false, writable: false, entries: null as number | null };
+  if (!info?.isDirectory())
+    return {
+      path,
+      exists: false,
+      readable: false,
+      writable: false,
+      entries: null as number | null,
+    };
   const [readable, writable, entries] = await Promise.all([
-    access(path, fsConstants.R_OK).then(() => true).catch(() => false),
-    access(path, fsConstants.W_OK).then(() => true).catch(() => false),
-    readdir(path).then((items) => items.length).catch(() => null),
+    access(path, fsConstants.R_OK)
+      .then(() => true)
+      .catch(() => false),
+    access(path, fsConstants.W_OK)
+      .then(() => true)
+      .catch(() => false),
+    readdir(path)
+      .then((items) => items.length)
+      .catch(() => null),
   ]);
   return { path, exists: true, readable, writable, entries };
 }
@@ -43,7 +58,8 @@ async function linuxLoginUsers() {
         const username = parts[0] || "";
         const uid = Number(parts[2]);
         const shell = parts[6] || "";
-        const interactive = Boolean(shell) && !shell.endsWith("/nologin") && !shell.endsWith("/false");
+        const interactive =
+          Boolean(shell) && !shell.endsWith("/nologin") && !shell.endsWith("/false");
         return interactive && (username === "root" || uid >= 1000);
       }).length;
   } catch {
@@ -58,8 +74,12 @@ export async function fileManagerSummary() {
     linuxLoginUsers(),
   ]);
   const root = locations.find((location) => location.path === "/") || null;
-  const availableLocations = locations.filter((location) => location.exists && location.readable).length;
-  const writableLocations = locations.filter((location) => location.exists && location.writable).length;
+  const availableLocations = locations.filter(
+    (location) => location.exists && location.readable,
+  ).length;
+  const writableLocations = locations.filter(
+    (location) => location.exists && location.writable,
+  ).length;
 
   return {
     hostname: os.hostname(),

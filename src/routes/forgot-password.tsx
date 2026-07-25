@@ -20,7 +20,11 @@ function Page() {
     <AuthShell
       title="Forgot your password?"
       desc="We'll email you a link to reset it."
-      footer={<Link to="/login" className="hover:text-foreground">Back to sign in</Link>}
+      footer={
+        <Link to="/login" className="hover:text-foreground">
+          Back to sign in
+        </Link>
+      }
     >
       {sent ? (
         <div className="rounded-md border border-primary/40 bg-primary/10 p-4 text-sm">

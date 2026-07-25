@@ -10,10 +10,7 @@ export const Route = createFileRoute("/session-expired")({
 
 function SessionExpiredPage() {
   return (
-    <AuthShell
-      title="Session expired"
-      desc="You were signed out to protect your account."
-    >
+    <AuthShell title="Session expired" desc="You were signed out to protect your account.">
       <div className="rounded-md border border-border bg-surface p-4 text-sm text-muted-foreground">
         <div className="flex items-center gap-2 font-medium text-foreground">
           <Clock className="h-4 w-4 text-primary" />

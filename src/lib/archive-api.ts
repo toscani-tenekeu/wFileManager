@@ -56,21 +56,28 @@ function headers(json = false): HeadersInit {
 export const archiveApi = {
   inspect: (path: string) => {
     const query = new URLSearchParams({ action: "archive-inspect", path });
-    return fetch(`/api/local?${query}`, { headers: headers(), cache: "no-store" }).then(parse<ArchiveInspection>);
+    return fetch(`/api/local?${query}`, { headers: headers(), cache: "no-store" }).then(
+      parse<ArchiveInspection>,
+    );
   },
-  create: (path: string, format: ArchiveFormat) => fetch("/api/local?action=archive-create", {
-    method: "POST",
-    headers: headers(true),
-    body: JSON.stringify({ path, format }),
-  }).then(parse<ArchiveCreationResult>),
-  extract: (path: string, options: {
-    mode: ExtractionMode;
-    folderName?: string;
-    destination?: string;
-    conflictPolicy?: ConflictPolicy;
-  }) => fetch("/api/local?action=archive-extract", {
-    method: "POST",
-    headers: headers(true),
-    body: JSON.stringify({ path, ...options }),
-  }).then(parse<ArchiveExtractionResult>),
+  create: (path: string, format: ArchiveFormat) =>
+    fetch("/api/local?action=archive-create", {
+      method: "POST",
+      headers: headers(true),
+      body: JSON.stringify({ path, format }),
+    }).then(parse<ArchiveCreationResult>),
+  extract: (
+    path: string,
+    options: {
+      mode: ExtractionMode;
+      folderName?: string;
+      destination?: string;
+      conflictPolicy?: ConflictPolicy;
+    },
+  ) =>
+    fetch("/api/local?action=archive-extract", {
+      method: "POST",
+      headers: headers(true),
+      body: JSON.stringify({ path, ...options }),
+    }).then(parse<ArchiveExtractionResult>),
 };

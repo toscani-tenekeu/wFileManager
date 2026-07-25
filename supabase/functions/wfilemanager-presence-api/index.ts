@@ -3,14 +3,16 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-wfilemanager-instance",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-wfilemanager-instance",
   "Access-Control-Allow-Methods": "GET,OPTIONS",
 };
 
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
-  status,
-  headers: { ...cors, "Content-Type": "application/json" },
-});
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...cors, "Content-Type": "application/json" },
+  });
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -21,7 +23,9 @@ const supabase = createClient(
 const encoder = new TextEncoder();
 
 function bytesToHex(bytes: Uint8Array) {
-  return Array.from(bytes).map((value) => value.toString(16).padStart(2, "0")).join("");
+  return Array.from(bytes)
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 async function sha256(value: string) {
@@ -37,7 +41,8 @@ Deno.serve(async (req) => {
     const action = url.pathname.split("/").filter(Boolean).pop() || "presence";
     if (action !== "presence") return json({ error: "Not found" }, 404);
 
-    const instanceKey = req.headers.get("x-wfilemanager-instance") || url.searchParams.get("instance") || "default";
+    const instanceKey =
+      req.headers.get("x-wfilemanager-instance") || url.searchParams.get("instance") || "default";
     const authorization = req.headers.get("Authorization") || "";
     const token = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
     if (!token) return json({ error: "Unauthorized" }, 401);

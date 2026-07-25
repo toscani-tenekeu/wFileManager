@@ -16,10 +16,7 @@
   "compatibility": {
     "operatingSystem": "Ubuntu >= 20.04 LTS",
     "recommended": "Ubuntu 24.04 LTS",
-    "architectures": [
-      "amd64",
-      "arm64"
-    ],
+    "architectures": ["amd64", "arm64"],
     "virtualization": [
       "bare-metal",
       "KVM",
@@ -27,10 +24,7 @@
     ],
     "domainRequired": true
   },
-  "databaseModes": [
-    "KmerHosting managed Supabase",
-    "local SQLite"
-  ],
+  "databaseModes": ["KmerHosting managed Supabase", "local SQLite"],
   "notes": [
     "Adds an exportable Recovery Kit for KmerHosting managed Supabase installations.",
     "Lets the official installer create, recover or permanently delete a managed Supabase installation.",

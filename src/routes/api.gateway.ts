@@ -1,9 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type {} from "@tanstack/react-start";
 
-const PROJECT_URL = (process.env.WFILEMANAGER_SUPABASE_URL || process.env.VITE_SUPABASE_URL || "https://igihzeyfgwhnuiflamvn.supabase.co").replace(/\/$/, "");
+const PROJECT_URL = (
+  process.env.WFILEMANAGER_SUPABASE_URL ||
+  process.env.VITE_SUPABASE_URL ||
+  "https://igihzeyfgwhnuiflamvn.supabase.co"
+).replace(/\/$/, "");
 const DATABASE_MODE = process.env.WFILEMANAGER_DATABASE_MODE === "sqlite" ? "sqlite" : "supabase";
-const INSTANCE_KEY = process.env.WFILEMANAGER_INSTANCE_KEY || process.env.VITE_WFILEMANAGER_INSTANCE_KEY || "kmerhosting-main";
+const INSTANCE_KEY =
+  process.env.WFILEMANAGER_INSTANCE_KEY ||
+  process.env.VITE_WFILEMANAGER_INSTANCE_KEY ||
+  "kmerhosting-main";
 const COOKIE_NAME = "wfm_session";
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -87,7 +94,10 @@ function validScope(value: string): value is Scope {
 function upstreamFor(request: Request, scope: Scope, action: string) {
   if (DATABASE_MODE === "sqlite") {
     const url = new URL("/api/sqlite", request.url);
-    url.searchParams.set("scope", scope === "login" || scope === "setup" ? "auth" : scope === "users" ? "auth" : scope);
+    url.searchParams.set(
+      "scope",
+      scope === "login" || scope === "setup" ? "auth" : scope === "users" ? "auth" : scope,
+    );
     url.searchParams.set("action", action);
     return url;
   }
@@ -101,13 +111,24 @@ async function requestBody(request: Request, scope: Scope) {
   if (["GET", "HEAD"].includes(request.method)) return undefined;
   if (scope !== "setup" || DATABASE_MODE === "sqlite") return await request.arrayBuffer();
 
-  const payload = await request.json().catch(() => ({})) as Record<string, unknown>;
-  const publicUrl = process.env.WFILEMANAGER_PUBLIC_BASE_URL || `${secureRequest(request) ? "https" : "http"}://${request.headers.get("host") || new URL(request.url).host}`;
+  const payload = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const publicUrl =
+    process.env.WFILEMANAGER_PUBLIC_BASE_URL ||
+    `${secureRequest(request) ? "https" : "http"}://${request.headers.get("host") || new URL(request.url).host}`;
   return JSON.stringify({
     ...payload,
-    rootResetTokenHash: process.env.WFILEMANAGER_ROOT_RESET_TOKEN_HASH || process.env.VITE_WFILEMANAGER_ROOT_RESET_TOKEN_HASH || "",
-    instanceSecretHash: process.env.WFILEMANAGER_INSTANCE_SECRET_HASH || process.env.VITE_WFILEMANAGER_INSTANCE_SECRET_HASH || "",
-    hostname: process.env.WFILEMANAGER_DOMAIN || request.headers.get("host")?.split(":")[0] || new URL(request.url).hostname,
+    rootResetTokenHash:
+      process.env.WFILEMANAGER_ROOT_RESET_TOKEN_HASH ||
+      process.env.VITE_WFILEMANAGER_ROOT_RESET_TOKEN_HASH ||
+      "",
+    instanceSecretHash:
+      process.env.WFILEMANAGER_INSTANCE_SECRET_HASH ||
+      process.env.VITE_WFILEMANAGER_INSTANCE_SECRET_HASH ||
+      "",
+    hostname:
+      process.env.WFILEMANAGER_DOMAIN ||
+      request.headers.get("host")?.split(":")[0] ||
+      new URL(request.url).hostname,
     baseUrl: publicUrl.replace(/\/$/, ""),
   });
 }
@@ -116,8 +137,10 @@ async function proxy(request: Request) {
   const url = new URL(request.url);
   const scopeValue = url.searchParams.get("scope") || "auth";
   const action = url.searchParams.get("action") || "status";
-  if (!validScope(scopeValue) || !allowedActions[scopeValue].has(action)) return json({ error: "Unsupported gateway action" }, 404);
-  if (!["GET", "HEAD"].includes(request.method) && !sameOrigin(request)) return json({ error: "Cross-origin request rejected" }, 403);
+  if (!validScope(scopeValue) || !allowedActions[scopeValue].has(action))
+    return json({ error: "Unsupported gateway action" }, 404);
+  if (!["GET", "HEAD"].includes(request.method) && !sameOrigin(request))
+    return json({ error: "Cross-origin request rejected" }, 403);
 
   const upstreamUrl = upstreamFor(request, scopeValue, action);
   for (const [key, value] of url.searchParams) {
@@ -130,7 +153,8 @@ async function proxy(request: Request) {
   });
   const sessionToken = cookieValue(request, COOKIE_NAME);
   if (sessionToken) headers.set("Authorization", `Bearer ${sessionToken}`);
-  if (!["GET", "HEAD"].includes(request.method)) headers.set("Content-Type", request.headers.get("content-type") || "application/json");
+  if (!["GET", "HEAD"].includes(request.method))
+    headers.set("Content-Type", request.headers.get("content-type") || "application/json");
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
@@ -144,13 +168,14 @@ async function proxy(request: Request) {
       signal: controller.signal,
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") return json({ error: "The backend request timed out" }, 504);
+    if (error instanceof DOMException && error.name === "AbortError")
+      return json({ error: "The backend request timed out" }, 504);
     throw error;
   } finally {
     clearTimeout(timer);
   }
 
-  const payload = await upstream.json().catch(() => ({})) as Record<string, unknown>;
+  const payload = (await upstream.json().catch(() => ({}))) as Record<string, unknown>;
   const responseHeaders = new Headers({
     "Cache-Control": "no-store",
     "Content-Type": "application/json",
@@ -165,7 +190,10 @@ async function proxy(request: Request) {
     responseHeaders.append("Set-Cookie", clearCookie(request));
   }
 
-  return new Response(JSON.stringify(payload), { status: upstream.status, headers: responseHeaders });
+  return new Response(JSON.stringify(payload), {
+    status: upstream.status,
+    headers: responseHeaders,
+  });
 }
 
 export const Route = createFileRoute("/api/gateway")({

@@ -137,16 +137,21 @@ async function perform<T>(scope: GatewayScope, action: string, init: RequestInit
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(payload.error || `Request failed (${response.status})`) as Error & { status?: number; retryAfterSeconds?: number };
+    const error = new Error(payload.error || `Request failed (${response.status})`) as Error & {
+      status?: number;
+      retryAfterSeconds?: number;
+    };
     error.status = response.status;
-    if (Number.isFinite(payload.retryAfterSeconds)) error.retryAfterSeconds = Number(payload.retryAfterSeconds);
+    if (Number.isFinite(payload.retryAfterSeconds))
+      error.retryAfterSeconds = Number(payload.retryAfterSeconds);
     throw error;
   }
   return payload as T;
 }
 
 function signalNotificationsChanged() {
-  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("wfilemanager:notifications-changed"));
+  if (typeof window !== "undefined")
+    window.dispatchEvent(new CustomEvent("wfilemanager:notifications-changed"));
 }
 
 export const wfilemanagerApi = {
@@ -155,46 +160,117 @@ export const wfilemanagerApi = {
   setToken: (_value: string) => undefined,
   clearToken: () => undefined,
   status: () => perform<InstanceStatusResponse>("auth", "status"),
-  setup: (data: SetupPayload) => perform<{ success: true; user: AuthUser }>("auth", "setup", { method: "POST", body: JSON.stringify(data) }),
-  login: (login: string, password: string, remember: boolean) => perform<{ expiresAt: string; user: AuthUser }>("login", "login", { method: "POST", body: JSON.stringify({ login, password, remember }) }),
+  setup: (data: SetupPayload) =>
+    perform<{ success: true; user: AuthUser }>("auth", "setup", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  login: (login: string, password: string, remember: boolean) =>
+    perform<{ expiresAt: string; user: AuthUser }>("login", "login", {
+      method: "POST",
+      body: JSON.stringify({ login, password, remember }),
+    }),
   me: () => perform<{ user: AuthUser; instance: WFileManagerInstance }>("auth", "me"),
   logout: () => perform<{ success: true }>("auth", "logout", { method: "POST", body: "{}" }),
   users: () => perform<{ users: AuthUser[] }>("auth", "users"),
-  createUser: (data: { displayName: string; username: string; email?: string; password: string; roleId?: string; status?: string; mustChangePassword?: boolean }) =>
+  createUser: (data: {
+    displayName: string;
+    username: string;
+    email?: string;
+    password: string;
+    roleId?: string;
+    status?: string;
+    mustChangePassword?: boolean;
+  }) =>
     perform<{ user: AuthUser }>("auth", "users", { method: "POST", body: JSON.stringify(data) }),
-  deleteUser: (id: string) => perform<{ success: true; deleted: { id: string; username: string; displayName: string } }>("users", "users", { method: "DELETE", body: JSON.stringify({ id }) }),
+  deleteUser: (id: string) =>
+    perform<{ success: true; deleted: { id: string; username: string; displayName: string } }>(
+      "users",
+      "users",
+      { method: "DELETE", body: JSON.stringify({ id }) },
+    ),
   accountProfile: () => perform<{ user: AuthUser }>("account", "profile"),
-  updateAccountProfile: (data: { displayName: string; email?: string | null; timezone: string }) => perform<{ user: AuthUser }>("account", "profile", { method: "PATCH", body: JSON.stringify(data) }),
-  changePassword: (currentPassword: string, newPassword: string) => perform<{ success: true }>("account", "password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) }),
+  updateAccountProfile: (data: { displayName: string; email?: string | null; timezone: string }) =>
+    perform<{ user: AuthUser }>("account", "profile", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    perform<{ success: true }>("account", "password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
   accountSessions: () => perform<{ sessions: WFileManagerSession[] }>("account", "sessions"),
-  revokeSession: (id: string) => perform<{ success: true; currentRevoked: boolean }>("account", "sessions", { method: "DELETE", body: JSON.stringify({ id }) }),
-  revokeAllSessions: () => perform<{ success: true; currentRevoked: true }>("account", "sessions", { method: "DELETE", body: JSON.stringify({ all: true }) }),
-  rolePermissions: () => perform<{ roleId: string | null; roleName: string | null; permissions: string[] }>("roles", "permissions"),
+  revokeSession: (id: string) =>
+    perform<{ success: true; currentRevoked: boolean }>("account", "sessions", {
+      method: "DELETE",
+      body: JSON.stringify({ id }),
+    }),
+  revokeAllSessions: () =>
+    perform<{ success: true; currentRevoked: true }>("account", "sessions", {
+      method: "DELETE",
+      body: JSON.stringify({ all: true }),
+    }),
+  rolePermissions: () =>
+    perform<{ roleId: string | null; roleName: string | null; permissions: string[] }>(
+      "roles",
+      "permissions",
+    ),
   roles: () => perform<{ roles: WFileManagerRole[] }>("roles", "roles"),
   createRole: (data: { name: string; description?: string; permissions: string[] }) =>
-    perform<{ role: WFileManagerRole }>("roles", "roles", { method: "POST", body: JSON.stringify(data) }),
+    perform<{ role: WFileManagerRole }>("roles", "roles", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   updateRole: (data: { id: string; name?: string; description?: string; permissions?: string[] }) =>
-    perform<{ role: WFileManagerRole }>("roles", "roles", { method: "PATCH", body: JSON.stringify(data) }),
-  deleteRole: (id: string) => perform<{ success: true }>("roles", "roles", { method: "DELETE", body: JSON.stringify({ id }) }),
+    perform<{ role: WFileManagerRole }>("roles", "roles", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteRole: (id: string) =>
+    perform<{ success: true }>("roles", "roles", {
+      method: "DELETE",
+      body: JSON.stringify({ id }),
+    }),
   auditLogs: () => perform<{ logs: AuditLog[] }>("auth", "logs"),
-  notifications: () => perform<{ notifications: WFileManagerNotification[] }>("notifications", "notifications"),
-  createNotification: async (data: { title: string; message?: string; tone?: WFileManagerNotification["tone"]; link?: string; source?: string }) => {
-    const result = await perform<{ notification: WFileManagerNotification }>("notifications", "notifications", { method: "POST", body: JSON.stringify(data) });
+  notifications: () =>
+    perform<{ notifications: WFileManagerNotification[] }>("notifications", "notifications"),
+  createNotification: async (data: {
+    title: string;
+    message?: string;
+    tone?: WFileManagerNotification["tone"];
+    link?: string;
+    source?: string;
+  }) => {
+    const result = await perform<{ notification: WFileManagerNotification }>(
+      "notifications",
+      "notifications",
+      { method: "POST", body: JSON.stringify(data) },
+    );
     signalNotificationsChanged();
     return result;
   },
   markNotificationRead: async (id: string, read = true) => {
-    const result = await perform<{ success: true }>("notifications", "notifications", { method: "PATCH", body: JSON.stringify({ id, read }) });
+    const result = await perform<{ success: true }>("notifications", "notifications", {
+      method: "PATCH",
+      body: JSON.stringify({ id, read }),
+    });
     signalNotificationsChanged();
     return result;
   },
   markAllNotificationsRead: async () => {
-    const result = await perform<{ success: true }>("notifications", "notifications", { method: "PATCH", body: JSON.stringify({ markAll: true }) });
+    const result = await perform<{ success: true }>("notifications", "notifications", {
+      method: "PATCH",
+      body: JSON.stringify({ markAll: true }),
+    });
     signalNotificationsChanged();
     return result;
   },
   deleteNotification: async (id: string) => {
-    const result = await perform<{ success: true }>("notifications", "notifications", { method: "DELETE", body: JSON.stringify({ id }) });
+    const result = await perform<{ success: true }>("notifications", "notifications", {
+      method: "DELETE",
+      body: JSON.stringify({ id }),
+    });
     signalNotificationsChanged();
     return result;
   },
