@@ -9,6 +9,10 @@ import {
 
 const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 1_000;
+const STAT_CONCURRENCY = Math.max(
+  4,
+  Math.min(64, Number(process.env.WFILEMANAGER_DIRECTORY_STAT_CONCURRENCY || 24)),
+);
 
 function fileKind(value: Awaited<ReturnType<typeof lstat>>): LocalFileEntry["kind"] {
   if (value.isDirectory()) return "directory";
@@ -94,6 +98,20 @@ async function entryFor(parent: string, name: string): Promise<LocalFileEntry> {
   };
 }
 
+async function entriesWithLimit(parent: string, names: string[]) {
+  const results: LocalFileEntry[] = [];
+  let cursor = 0;
+  async function worker() {
+    while (cursor < names.length) {
+      const index = cursor++;
+      const entry = await entryFor(parent, names[index]).catch(() => null);
+      if (entry) results.push(entry);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(STAT_CONCURRENCY, names.length) }, () => worker()));
+  return results;
+}
+
 export async function listDirectoryPage(
   inputPath: unknown,
   options: { cursor?: unknown; query?: unknown; limit?: unknown } = {},
@@ -118,19 +136,13 @@ export async function listDirectoryPage(
       left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" }),
     );
   const names = allNames.slice(cursor, cursor + limit);
-  const settled = await Promise.allSettled(names.map((name) => entryFor(target, name)));
-  const entries = settled
-    .filter(
-      (result): result is PromiseFulfilledResult<LocalFileEntry> => result.status === "fulfilled",
-    )
-    .map((result) => result.value)
-    .sort((left, right) => {
-      if (left.kind !== right.kind) {
-        if (left.kind === "directory") return -1;
-        if (right.kind === "directory") return 1;
-      }
-      return left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" });
-    });
+  const entries = (await entriesWithLimit(target, names)).sort((left, right) => {
+    if (left.kind !== right.kind) {
+      if (left.kind === "directory") return -1;
+      if (right.kind === "directory") return 1;
+    }
+    return left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" });
+  });
   const next = cursor + names.length;
 
   return {
