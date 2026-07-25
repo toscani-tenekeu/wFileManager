@@ -7,11 +7,9 @@ const cors = {
   "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
   "Cache-Control": "no-store",
 };
-const db = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  { auth: { persistSession: false } },
-);
+const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
+  auth: { persistSession: false },
+});
 const encoder = new TextEncoder();
 const PASSWORD_ITERATIONS = 210000;
 
@@ -54,13 +52,9 @@ async function sha256(value: string) {
   return hex(new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value))));
 }
 async function passwordHash(password: string, salt: string, iterations = PASSWORD_ITERATIONS) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(password),
-    "PBKDF2",
-    false,
-    ["deriveBits"],
-  );
+  const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, [
+    "deriveBits",
+  ]);
   const bits = await crypto.subtle.deriveBits(
     { name: "PBKDF2", salt: hexBytes(salt), iterations, hash: "SHA-256" },
     key,
@@ -139,14 +133,22 @@ async function authenticate(request: Request): Promise<Authenticated | null> {
       .eq("instance_id", instance.id)
       .maybeSingle();
     permissions = Array.isArray(role?.permissions)
-      ? role.permissions.filter((permission): permission is string => typeof permission === "string")
+      ? role.permissions.filter(
+          (permission): permission is string => typeof permission === "string",
+        )
       : [];
   }
   if (!permissions.includes("manage_users")) return null;
   return { session, actor, instance, permissions };
 }
 
-async function audit(request: Request, auth: Authenticated, action: string, target?: string, result = "success") {
+async function audit(
+  request: Request,
+  auth: Authenticated,
+  action: string,
+  target?: string,
+  result = "success",
+) {
   await db.from("wfilemanager_audit_logs").insert({
     instance_id: auth.instance.id,
     user_id: auth.actor.id,
@@ -163,7 +165,9 @@ async function audit(request: Request, auth: Authenticated, action: string, targ
 async function listUsers(auth: Authenticated) {
   const { data, error } = await db
     .from("wfilemanager_users")
-    .select("id,instance_id,role_id,username,email,display_name,timezone,status,is_admin,must_change_password,last_login_at,created_at,wfilemanager_roles(name)")
+    .select(
+      "id,instance_id,role_id,username,email,display_name,timezone,status,is_admin,must_change_password,last_login_at,created_at,wfilemanager_roles(name)",
+    )
     .eq("instance_id", auth.instance.id)
     .order("is_admin", { ascending: false })
     .order("username", { ascending: true });
@@ -185,7 +189,13 @@ async function createUser(request: Request, auth: Authenticated, body: Row) {
     ? clean(body.status)
     : "active";
   if (!/^[a-z0-9._-]{3,64}$/.test(username)) {
-    return json({ error: "Username must contain 3 to 64 lowercase letters, numbers, dots, underscores or hyphens" }, 400);
+    return json(
+      {
+        error:
+          "Username must contain 3 to 64 lowercase letters, numbers, dots, underscores or hyphens",
+      },
+      400,
+    );
   }
   if (displayName.length < 2 || displayName.length > 120) {
     return json({ error: "Display name must contain 2 to 120 characters" }, 400);
@@ -203,7 +213,8 @@ async function createUser(request: Request, auth: Authenticated, body: Row) {
       .eq("instance_id", auth.instance.id)
       .maybeSingle();
     if (roleError) throw roleError;
-    if (!role) return json({ error: "The selected role does not belong to this installation" }, 400);
+    if (!role)
+      return json({ error: "The selected role does not belong to this installation" }, 400);
   }
   const salt = randomHex(16);
   const { data, error } = await db
@@ -226,7 +237,8 @@ async function createUser(request: Request, auth: Authenticated, body: Row) {
     .single();
   if (error) {
     await audit(request, auth, "user.create", username, "failure");
-    if (String(error.code) === "23505") return json({ error: "Username or email already exists" }, 409);
+    if (String(error.code) === "23505")
+      return json({ error: "Username or email already exists" }, 409);
     throw error;
   }
   await audit(request, auth, "user.create", username);
@@ -245,7 +257,8 @@ async function deleteUser(request: Request, auth: Authenticated, body: Row) {
     .maybeSingle();
   if (targetError) throw targetError;
   if (!target) return json({ error: "User was not found" }, 404);
-  if (target.is_admin === true) return json({ error: "The installation administrator cannot be deleted" }, 409);
+  if (target.is_admin === true)
+    return json({ error: "The installation administrator cannot be deleted" }, 409);
   const { error } = await db
     .from("wfilemanager_users")
     .delete()
@@ -273,12 +286,15 @@ Deno.serve(async (request: Request) => {
     const auth = await authenticate(request);
     if (!auth) return json({ error: "Administrator or manage users permission required" }, 403);
     if (request.method === "GET") return listUsers(auth);
-    const body = await request.json().catch(() => ({})) as Row;
+    const body = (await request.json().catch(() => ({}))) as Row;
     if (request.method === "POST") return createUser(request, auth, body);
     if (request.method === "DELETE") return deleteUser(request, auth, body);
     return json({ error: "Method not allowed" }, 405);
   } catch (error) {
     console.error(error);
-    return json({ error: error instanceof Error ? error.message : "User administration failed" }, 500);
+    return json(
+      { error: error instanceof Error ? error.message : "User administration failed" },
+      500,
+    );
   }
 });
