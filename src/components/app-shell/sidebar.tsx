@@ -14,6 +14,7 @@ import {
   Bell,
   LifeBuoy,
   Globe2,
+  ScrollText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +52,7 @@ const NAV: { label: string; items: Item[] }[] = [
       { to: "/terminal", label: "Terminal", icon: TerminalSquare, adminOnly: true },
       { to: "/users", label: "Users", icon: Users, permission: "manage_users" },
       { to: "/roles", label: "Roles & permissions", icon: ShieldCheck, permission: "manage_roles" },
+      { to: "/logs", label: "Audit logs", icon: ScrollText, adminOnly: true },
     ],
   },
   {
@@ -92,9 +94,7 @@ export function AppSidebar({ className }: { className?: string }) {
         if (mounted && result.currentVersion) setVersion(result.currentVersion);
       })
       .catch(() => undefined);
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
 
   return (
@@ -118,19 +118,10 @@ export function AppSidebar({ className }: { className?: string }) {
                 const Icon = item.icon;
                 const active = isActive(item.to);
                 const itemClassName = cn("group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors", active ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground");
-                const content = (
-                  <>
-                    <Icon className={cn("h-4 w-4", active ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
-                    <span className="truncate">{item.label}</span>
-                  </>
-                );
+                const content = <><Icon className={cn("h-4 w-4", active ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} /><span className="truncate">{item.label}</span></>;
                 return (
                   <li key={item.to || item.href}>
-                    {item.href ? (
-                      <a href={item.href} target={item.newTab ? "_blank" : undefined} rel={item.newTab ? "noreferrer" : undefined} className={itemClassName}>{content}</a>
-                    ) : (
-                      <Link to={item.to!} className={itemClassName}>{content}</Link>
-                    )}
+                    {item.href ? <a href={item.href} target={item.newTab ? "_blank" : undefined} rel={item.newTab ? "noreferrer" : undefined} className={itemClassName}>{content}</a> : <Link to={item.to!} className={itemClassName}>{content}</Link>}
                   </li>
                 );
               })}
