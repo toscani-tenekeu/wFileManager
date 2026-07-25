@@ -5,6 +5,7 @@ import {
 } from "@/lib/server/sqlite-store";
 import * as remoteRuntime from "@/lib/server/local-runtime";
 import type { LocalPathRule } from "@/lib/server/path-policy-runtime";
+import { pathRulesForUser } from "@/lib/server/sqlite-path-policy";
 
 const DATABASE_MODE = process.env.WFILEMANAGER_DATABASE_MODE === "sqlite" ? "sqlite" : "supabase";
 const COOKIE_NAME = "wfm_session";
@@ -63,7 +64,8 @@ function normalizedPathRules(value: unknown): LocalPathRule[] {
   return value.flatMap((entry) => {
     if (!entry || typeof entry !== "object") return [];
     const rule = entry as Record<string, unknown>;
-    const accessMode = rule.accessMode === "deny" ? "deny" : rule.accessMode === "allow" ? "allow" : null;
+    const accessMode =
+      rule.accessMode === "deny" ? "deny" : rule.accessMode === "allow" ? "allow" : null;
     if (typeof rule.path !== "string" || !rule.path.startsWith("/") || !accessMode) return [];
     return [
       {
@@ -81,9 +83,7 @@ function sqliteUser(request: Request): LocalUser {
   const token = tokenFromRequest(request);
   if (!token) throw new LocalApiError(401, "Missing session token");
   try {
-    const user = sqliteUserResponse(sqliteSessionUser(token)) as ReturnType<typeof sqliteUserResponse> & {
-      pathRules?: LocalPathRule[];
-    };
+    const user = sqliteUserResponse(sqliteSessionUser(token));
     return {
       id: user.id,
       username: user.username,
@@ -93,9 +93,7 @@ function sqliteUser(request: Request): LocalUser {
       roleId: user.roleId,
       roleName: user.roleName,
       permissions: assignablePermissions(user.permissions),
-      pathRules: user.isAdmin
-        ? [{ path: "/", accessMode: "allow", recursive: true, source: "user" }]
-        : normalizedPathRules(user.pathRules),
+      pathRules: pathRulesForUser(user.id, user.roleId, user.isAdmin),
     };
   } catch (error) {
     const value = error as { status?: number; message?: string };
@@ -112,7 +110,9 @@ async function remotePolicy(request: Request, user: remoteRuntime.LocalUser) {
   if (user.isAdmin) {
     return {
       permissions: assignablePermissions(user.permissions),
-      pathRules: [{ path: "/", accessMode: "allow", recursive: true, source: "user" }] as LocalPathRule[],
+      pathRules: [
+        { path: "/", accessMode: "allow", recursive: true, source: "user" },
+      ] as LocalPathRule[],
     };
   }
   const cached = policyCache.get(token);
