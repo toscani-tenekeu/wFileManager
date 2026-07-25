@@ -3,39 +3,28 @@ import { createFileRoute } from "@tanstack/react-router";
 import type {} from "@tanstack/react-start";
 
 function json(body: unknown, status = 200) {
-  return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+  return Response.json(body, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
 }
 
-async function runtime() {
-  return import("@/lib/server/local-runtime");
-}
+async function runtime() { return import("@/lib/server/local-runtime"); }
+async function authRuntime() { return import("@/lib/server/local-auth-runtime"); }
+async function overviewRuntime() { return import("@/lib/server/file-manager-runtime"); }
+async function archiveRuntime() { return import("@/lib/server/archive-runtime-v2"); }
+async function safePathRuntime() { return import("@/lib/server/safe-path-runtime"); }
+async function uploadRuntime() { return import("@/lib/server/upload-runtime"); }
+async function archiveGuard() { return import("@/lib/server/archive-guard"); }
+async function terminalRuntime() { return import("@/lib/server/terminal-runtime"); }
+async function directoryRuntime() { return import("@/lib/server/directory-runtime"); }
+async function atomicFileRuntime() { return import("@/lib/server/atomic-file-runtime"); }
+async function operationRuntime() { return import("@/lib/server/operation-jobs-runtime"); }
+async function downloadRuntime() { return import("@/lib/server/download-runtime"); }
+async function hashRuntime() { return import("@/lib/server/file-hash-runtime"); }
 
-async function authRuntime() {
-  return import("@/lib/server/local-auth-runtime");
-}
-
-async function overviewRuntime() {
-  return import("@/lib/server/file-manager-runtime");
-}
-
-async function archiveRuntime() {
-  return import("@/lib/server/archive-runtime-v2");
-}
-
-async function safePathRuntime() {
-  return import("@/lib/server/safe-path-runtime");
-}
-
-async function uploadRuntime() {
-  return import("@/lib/server/upload-runtime");
-}
-
-async function archiveGuard() {
-  return import("@/lib/server/archive-guard");
-}
-
-async function terminalRuntime() {
-  return import("@/lib/server/terminal-runtime");
+function sameOrigin(request: Request) {
+  if (request.headers.get("sec-fetch-site") === "cross-site") return false;
+  const origin = request.headers.get("origin");
+  if (!origin) return true;
+  try { return new URL(origin).origin === new URL(request.url).origin; } catch { return false; }
 }
 
 async function handleError(error: unknown) {
@@ -67,10 +56,7 @@ export const Route = createFileRoute("/api/local")({
             await auth.requirePermission(request, "browse");
             const archive = await archiveRuntime();
             const guard = await archiveGuard();
-            const [inspection, safety] = await Promise.all([
-              archive.inspectArchive(target),
-              guard.inspectArchiveSafety(target),
-            ]);
+            const [inspection, safety] = await Promise.all([archive.inspectArchive(target), guard.inspectArchiveSafety(target)]);
             return json({ ...inspection, safety });
           }
           if (action === "update-info" || action === "update-status") {
@@ -89,11 +75,17 @@ export const Route = createFileRoute("/api/local")({
           }
           if (action === "job") {
             const user = await auth.requireUser(request);
-            return json({ job: api.getOperationJob(user.id, url.searchParams.get("id")) });
+            const operations = await operationRuntime();
+            return json({ job: await operations.getOperationJob(user.id, url.searchParams.get("id")) });
           }
           if (action === "list") {
             await auth.requirePermission(request, "browse");
-            return json(await api.listDirectory(target));
+            const directory = await directoryRuntime();
+            return json(await directory.listDirectoryPage(target, {
+              cursor: url.searchParams.get("cursor"),
+              query: url.searchParams.get("q"),
+              limit: url.searchParams.get("limit"),
+            }));
           }
           if (action === "read") {
             await auth.requirePermission(request, "read");
@@ -101,7 +93,8 @@ export const Route = createFileRoute("/api/local")({
           }
           if (action === "download") {
             await auth.requirePermission(request, "download");
-            return api.downloadResponse(target);
+            const download = await downloadRuntime();
+            return download.streamedDownloadResponse(request, target);
           }
           if (action === "trash-list") {
             const user = await auth.requireAnyPermission(request, ["delete", "restore", "permanently_delete"]);
@@ -114,6 +107,7 @@ export const Route = createFileRoute("/api/local")({
       },
       POST: async ({ request }) => {
         try {
+          if (!sameOrigin(request)) return json({ error: "Cross-origin request rejected" }, 403);
           const api = await runtime();
           const auth = await authRuntime();
           const safe = await safePathRuntime();
@@ -185,8 +179,8 @@ export const Route = createFileRoute("/api/local")({
           }
           if (action === "save") {
             await auth.requirePermission(request, "edit");
-            const target = await safe.assertSafeExistingMutation(body.path);
-            return json(await api.saveTextFile(target, body.content));
+            const atomic = await atomicFileRuntime();
+            return json(await atomic.saveTextFileAtomic(body.path, body.content, body.expectedModifiedAt));
           }
           if (action === "rename") {
             await auth.requirePermission(request, "rename");
@@ -198,6 +192,11 @@ export const Route = createFileRoute("/api/local")({
             await auth.requirePermission(request, "change_permissions");
             const target = await safe.assertSafeExistingMutation(body.path);
             return json(await api.changeMode(target, body.mode));
+          }
+          if (action === "checksum") {
+            await auth.requirePermission(request, "calculate_checksums");
+            const hashes = await hashRuntime();
+            return json(await hashes.fileIntegrityHash(body.path, body.algorithm));
           }
           if (action === "trash-move") {
             const user = await auth.requirePermission(request, "delete");
@@ -226,7 +225,13 @@ export const Route = createFileRoute("/api/local")({
             const user = await auth.requirePermission(request, permission);
             const source = await safe.assertSafeExistingMutation(body.source);
             const destination = operation === "delete" ? undefined : await safe.assertSafeDirectory(body.destination);
-            return json({ job: api.startOperationJob(user.id, operation, source, destination) }, 202);
+            const operations = await operationRuntime();
+            return json({ job: await operations.startOperationJob(user.id, operation, source, destination) }, 202);
+          }
+          if (action === "job-cancel") {
+            const user = await auth.requireUser(request);
+            const operations = await operationRuntime();
+            return json({ job: await operations.cancelOperationJob(user.id, body.id) });
           }
           return json({ error: "Unknown action" }, 404);
         } catch (error) {
