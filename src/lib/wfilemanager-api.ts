@@ -234,6 +234,7 @@ export const wfilemanagerApi = {
       body: JSON.stringify({ id }),
     }),
   auditLogs: () => perform<{ logs: AuditLog[] }>("auth", "logs"),
+  onlineUsers: () => perform<{ onlineUsers: number; generatedAt?: string }>("presence", "presence"),
   notifications: () =>
     perform<{ notifications: WFileManagerNotification[] }>("notifications", "notifications"),
   createNotification: async (data: {
@@ -271,6 +272,14 @@ export const wfilemanagerApi = {
     const result = await perform<{ success: true }>("notifications", "notifications", {
       method: "DELETE",
       body: JSON.stringify({ id }),
+    });
+    signalNotificationsChanged();
+    return result;
+  },
+  clearNotifications: async () => {
+    const result = await perform<{ success: true }>("notifications", "notifications", {
+      method: "DELETE",
+      body: JSON.stringify({ all: true }),
     });
     signalNotificationsChanged();
     return result;
