@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { createFileRoute } from "@tanstack/react-router";
 import type {} from "@tanstack/react-start";
 
@@ -13,6 +14,10 @@ const INSTANCE_KEY =
   "kmerhosting-main";
 const COOKIE_NAME = "wfm_session";
 const DEFAULT_TIMEOUT_MS = 30_000;
+const MAX_JSON_BODY_BYTES = Math.max(
+  16 * 1024,
+  Number(process.env.WFILEMANAGER_GATEWAY_MAX_BODY_BYTES || 1024 * 1024),
+);
 
 const endpoints = {
   auth: `${PROJECT_URL}/functions/v1/wfilemanager-api`,
@@ -28,7 +33,7 @@ const endpoints = {
 type Scope = keyof typeof allowedActions;
 
 const allowedActions = {
-  auth: new Set(["status", "me", "logout", "users", "logs"]),
+  auth: new Set(["status", "me", "logout", "logs"]),
   login: new Set(["login"]),
   setup: new Set(["setup"]),
   roles: new Set(["permissions", "roles"]),
@@ -103,16 +108,30 @@ function upstreamFor(request: Request, scope: Scope, action: string) {
   }
   if (scope === "login") return new URL(endpoints.login);
   if (scope === "setup") return new URL(endpoints.setup);
-  const userAdministration = scope === "users" || (scope === "auth" && action === "users");
-  const base = userAdministration ? endpoints.users : endpoints[scope];
-  return new URL(`${base}/${action}`);
+  return new URL(`${endpoints[scope]}/${action}`);
+}
+
+async function sqliteSetupSecret() {
+  const secretFile =
+    process.env.WFILEMANAGER_SETUP_SECRET_FILE || "/etc/wfilemanager/setup-secret.key";
+  return (await readFile(secretFile, "utf8").catch(() => "")).trim();
 }
 
 async function requestBody(request: Request, scope: Scope) {
   if (["GET", "HEAD"].includes(request.method)) return undefined;
-  if (scope !== "setup" || DATABASE_MODE === "sqlite") return await request.arrayBuffer();
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  if (contentLength > MAX_JSON_BODY_BYTES)
+    throw Object.assign(new Error("The request body is too large"), { status: 413 });
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  if (bytes.byteLength > MAX_JSON_BODY_BYTES)
+    throw Object.assign(new Error("The request body is too large"), { status: 413 });
+  if (scope !== "setup") return bytes;
 
-  const payload = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const text = new TextDecoder().decode(bytes);
+  const payload = (JSON.parse(text || "{}") || {}) as Record<string, unknown>;
+  if (DATABASE_MODE === "sqlite") {
+    return JSON.stringify({ ...payload, setupSecret: await sqliteSetupSecret() });
+  }
   const publicUrl =
     process.env.WFILEMANAGER_PUBLIC_BASE_URL ||
     `${secureRequest(request) ? "https" : "http"}://${request.headers.get("host") || new URL(request.url).host}`;
@@ -135,66 +154,72 @@ async function requestBody(request: Request, scope: Scope) {
 }
 
 async function proxy(request: Request) {
-  const url = new URL(request.url);
-  const scopeValue = url.searchParams.get("scope") || "auth";
-  const action = url.searchParams.get("action") || "status";
-  if (!validScope(scopeValue) || !allowedActions[scopeValue].has(action))
-    return json({ error: "Unsupported gateway action" }, 404);
-  if (!["GET", "HEAD"].includes(request.method) && !sameOrigin(request))
-    return json({ error: "Cross-origin request rejected" }, 403);
-
-  const upstreamUrl = upstreamFor(request, scopeValue, action);
-  for (const [key, value] of url.searchParams) {
-    if (key !== "scope" && key !== "action") upstreamUrl.searchParams.append(key, value);
-  }
-
-  const headers = new Headers({
-    Accept: "application/json",
-    "x-wfilemanager-instance": INSTANCE_KEY,
-  });
-  const sessionToken = cookieValue(request, COOKIE_NAME);
-  if (sessionToken) headers.set("Authorization", `Bearer ${sessionToken}`);
-  if (!["GET", "HEAD"].includes(request.method))
-    headers.set("Content-Type", request.headers.get("content-type") || "application/json");
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
-  let upstream: Response;
   try {
-    upstream = await fetch(upstreamUrl, {
-      method: request.method,
-      headers,
-      body: await requestBody(request, scopeValue),
-      redirect: "manual",
-      signal: controller.signal,
+    const url = new URL(request.url);
+    const scopeValue = url.searchParams.get("scope") || "auth";
+    const action = url.searchParams.get("action") || "status";
+    if (!validScope(scopeValue) || !allowedActions[scopeValue].has(action))
+      return json({ error: "Unsupported gateway action" }, 404);
+    if (!["GET", "HEAD"].includes(request.method) && !sameOrigin(request))
+      return json({ error: "Cross-origin request rejected" }, 403);
+
+    const upstreamUrl = upstreamFor(request, scopeValue, action);
+    for (const [key, value] of url.searchParams) {
+      if (key !== "scope" && key !== "action") upstreamUrl.searchParams.append(key, value);
+    }
+
+    const headers = new Headers({
+      Accept: "application/json",
+      "x-wfilemanager-instance": INSTANCE_KEY,
+    });
+    const sessionToken = cookieValue(request, COOKIE_NAME);
+    if (sessionToken) headers.set("Authorization", `Bearer ${sessionToken}`);
+    if (!["GET", "HEAD"].includes(request.method)) headers.set("Content-Type", "application/json");
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+    let upstream: Response;
+    try {
+      upstream = await fetch(upstreamUrl, {
+        method: request.method,
+        headers,
+        body: await requestBody(request, scopeValue),
+        redirect: "manual",
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError")
+        return json({ error: "The backend request timed out" }, 504);
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const payload = (await upstream.json().catch(() => ({}))) as Record<string, unknown>;
+    const responseHeaders = new Headers({
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json",
+      "X-Content-Type-Options": "nosniff",
+    });
+
+    if (scopeValue === "login" && upstream.ok && typeof payload.token === "string") {
+      responseHeaders.append("Set-Cookie", sessionCookie(request, payload.token, payload.expiresAt));
+      delete payload.token;
+    }
+    if (action === "logout" || upstream.status === 401 || payload.currentRevoked === true)
+      responseHeaders.append("Set-Cookie", clearCookie(request));
+
+    return new Response(JSON.stringify(payload), {
+      status: upstream.status,
+      headers: responseHeaders,
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError")
-      return json({ error: "The backend request timed out" }, 504);
-    throw error;
-  } finally {
-    clearTimeout(timer);
+    const status = Number((error as { status?: number }).status || 500);
+    return json(
+      { error: error instanceof Error ? error.message : "Gateway request failed" },
+      status,
+    );
   }
-
-  const payload = (await upstream.json().catch(() => ({}))) as Record<string, unknown>;
-  const responseHeaders = new Headers({
-    "Cache-Control": "no-store",
-    "Content-Type": "application/json",
-    "X-Content-Type-Options": "nosniff",
-  });
-
-  if (scopeValue === "login" && upstream.ok && typeof payload.token === "string") {
-    responseHeaders.append("Set-Cookie", sessionCookie(request, payload.token, payload.expiresAt));
-    delete payload.token;
-  }
-  if (action === "logout" || upstream.status === 401 || payload.currentRevoked === true) {
-    responseHeaders.append("Set-Cookie", clearCookie(request));
-  }
-
-  return new Response(JSON.stringify(payload), {
-    status: upstream.status,
-    headers: responseHeaders,
-  });
 }
 
 export const Route = createFileRoute("/api/gateway")({
