@@ -15,6 +15,9 @@ async function runtime() {
 async function authRuntime() {
   return import("@/lib/server/local-auth-runtime");
 }
+async function policyRuntime() {
+  return import("@/lib/server/path-policy-runtime");
+}
 async function overviewRuntime() {
   return import("@/lib/server/file-manager-runtime");
 }
@@ -83,27 +86,29 @@ export const Route = createFileRoute("/api/local")({
         try {
           const api = await runtime();
           const auth = await authRuntime();
+          const policy = await policyRuntime();
           const url = new URL(request.url);
           const action = url.searchParams.get("action") || "list";
           const target = url.searchParams.get("path") || "/";
 
           if (action === "overview") {
-            await auth.requireUser(request);
+            await auth.requireAdmin(request);
             const overview = await overviewRuntime();
             return json(await overview.fileManagerSummary());
           }
           if (action === "archive-inspect") {
-            await auth.requirePermission(request, "browse");
+            const user = await auth.requirePermission(request, "browse");
+            const archivePath = await policy.assertExistingPathAllowed(user, target);
             const archive = await archiveRuntime();
             const guard = await archiveGuard();
             const [inspection, safety] = await Promise.all([
-              archive.inspectArchive(target),
-              guard.inspectArchiveSafety(target),
+              archive.inspectArchive(archivePath),
+              guard.inspectArchiveSafety(archivePath),
             ]);
             return json({ ...inspection, safety });
           }
           if (action === "update-info" || action === "update-status") {
-            await auth.requireUser(request);
+            await auth.requireAdmin(request);
             return json(await api.updateSummary());
           }
           if (action === "terminal-user") {
@@ -130,10 +135,11 @@ export const Route = createFileRoute("/api/local")({
             });
           }
           if (action === "list") {
-            await auth.requirePermission(request, "browse");
+            const user = await auth.requirePermission(request, "browse");
+            const allowedTarget = await policy.assertDirectoryPathAllowed(user, target);
             const directory = await directoryRuntime();
             return json(
-              await directory.listDirectoryPage(target, {
+              await directory.listDirectoryPage(allowedTarget, {
                 cursor: url.searchParams.get("cursor"),
                 query: url.searchParams.get("q"),
                 limit: url.searchParams.get("limit"),
@@ -141,13 +147,16 @@ export const Route = createFileRoute("/api/local")({
             );
           }
           if (action === "read") {
-            await auth.requirePermission(request, "read");
-            return json(await api.readTextFile(target));
+            const user = await auth.requirePermission(request, "read");
+            return json(await api.readTextFile(await policy.assertExistingPathAllowed(user, target)));
           }
           if (action === "download") {
-            await auth.requirePermission(request, "download");
+            const user = await auth.requirePermission(request, "download");
             const download = await downloadRuntime();
-            return download.streamedDownloadResponse(request, target);
+            return download.streamedDownloadResponse(
+              request,
+              await policy.assertExistingPathAllowed(user, target),
+            );
           }
           if (action === "trash-list") {
             const user = await auth.requireAnyPermission(request, [
@@ -167,6 +176,7 @@ export const Route = createFileRoute("/api/local")({
           if (!sameOrigin(request)) return json({ error: "Cross-origin request rejected" }, 403);
           const api = await runtime();
           const auth = await authRuntime();
+          const policy = await policyRuntime();
           const safe = await safePathRuntime();
           const url = new URL(request.url);
           const action = url.searchParams.get("action") || "";
@@ -190,11 +200,19 @@ export const Route = createFileRoute("/api/local")({
           }
 
           if (action === "upload-raw") {
-            await auth.requirePermission(request, "upload");
+            const user = await auth.requirePermission(request, "upload");
             const upload = await uploadRuntime();
+            const destinationDirectory = await policy.assertDirectoryPathAllowed(
+              user,
+              url.searchParams.get("path") || "/",
+            );
+            await policy.assertDestinationPathAllowed(
+              user,
+              path.join(destinationDirectory, String(url.searchParams.get("name") || "")),
+            );
             return json(
               await upload.saveRawUpload(
-                url.searchParams.get("path") || "/",
+                destinationDirectory,
                 url.searchParams.get("name"),
                 request.body,
               ),
@@ -202,31 +220,59 @@ export const Route = createFileRoute("/api/local")({
             );
           }
           if (action === "upload") {
-            await auth.requirePermission(request, "upload");
+            const user = await auth.requirePermission(request, "upload");
             const upload = await uploadRuntime();
+            const destinationDirectory = await policy.assertDirectoryPathAllowed(
+              user,
+              url.searchParams.get("path") || "/",
+            );
             const form = await request.formData();
-            return json(await upload.saveUploads(url.searchParams.get("path") || "/", form), 201);
+            for (const value of form.values()) {
+              if (value instanceof File)
+                await policy.assertDestinationPathAllowed(
+                  user,
+                  path.join(destinationDirectory, value.name),
+                );
+            }
+            return json(await upload.saveUploads(destinationDirectory, form), 201);
           }
 
           const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
           if (action === "archive-create") {
-            await auth.requirePermission(request, "create_files");
-            await safe.assertSafeExistingMutation(body.path);
+            const user = await auth.requirePermission(request, "compress");
+            auth.assertPermission(user, "create_files");
+            const source = await policy.assertExistingPathAllowed(user, body.path);
+            await safe.assertSafeExistingMutation(source);
+            await policy.assertDestinationPathAllowed(
+              user,
+              `${source}${body.format === "zip" ? ".zip" : ".tar.gz"}`,
+            );
             const archive = await archiveRuntime();
-            return json(await archive.createArchive(body.path, body.format), 201);
+            return json(await archive.createArchive(source, body.format), 201);
           }
           if (action === "archive-extract") {
-            await auth.requirePermission(request, "create_files");
-            const archivePath = await safe.assertSafeExistingMutation(body.path);
+            const user = await auth.requirePermission(request, "extract");
+            auth.assertPermission(user, "create_files");
+            if (body.conflictPolicy === "overwrite") auth.assertPermission(user, "delete");
+            const archivePath = await safe.assertSafeExistingMutation(
+              await policy.assertExistingPathAllowed(user, body.path),
+            );
             const parent = path.dirname(archivePath);
             let destination = parent;
-            if (body.mode === "custom")
-              destination = await safe.assertSafeDirectory(body.destination);
-            else if (body.mode === "folder")
-              destination = await safe.assertSafeDestination(
+            if (body.mode === "custom") {
+              destination = await safe.assertSafeDirectory(
+                await policy.assertDirectoryPathAllowed(user, body.destination),
+              );
+            } else if (body.mode === "folder") {
+              destination = await policy.assertDestinationPathAllowed(
+                user,
                 path.join(parent, String(body.folderName || "extracted")),
               );
-            else await safe.assertSafeDirectory(parent);
+              await safe.assertSafeDestination(destination);
+            } else {
+              destination = await policy.assertDirectoryPathAllowed(user, parent);
+              await safe.assertSafeDirectory(destination);
+            }
             const guard = await archiveGuard();
             await guard.inspectArchiveSafety(archivePath, destination);
             const archive = await archiveRuntime();
@@ -250,47 +296,73 @@ export const Route = createFileRoute("/api/local")({
             return json(await api.rollbackApplicationUpdate(), 202);
           }
           if (action === "create-file") {
-            await auth.requirePermission(request, "create_files");
-            await safe.assertDestinationAbsent(
+            const user = await auth.requirePermission(request, "create_files");
+            const destination = await policy.assertDestinationPathAllowed(
+              user,
               path.join(String(body.path || "/"), String(body.name || "")),
             );
-            return json(await api.createFileAt(body.path, body.name, body.content), 201);
+            await safe.assertDestinationAbsent(destination);
+            return json(
+              await api.createFileAt(path.dirname(destination), path.basename(destination), body.content),
+              201,
+            );
           }
           if (action === "create-directory") {
-            await auth.requirePermission(request, "create_directories");
-            await safe.assertDestinationAbsent(
+            const user = await auth.requirePermission(request, "create_directories");
+            const destination = await policy.assertDestinationPathAllowed(
+              user,
               path.join(String(body.path || "/"), String(body.name || "")),
             );
-            return json(await api.createDirectoryAt(body.path, body.name), 201);
+            await safe.assertDestinationAbsent(destination);
+            return json(
+              await api.createDirectoryAt(path.dirname(destination), path.basename(destination)),
+              201,
+            );
           }
           if (action === "save") {
-            await auth.requirePermission(request, "edit");
+            const user = await auth.requirePermission(request, "edit");
+            const target = await safe.assertSafeExistingMutation(
+              await policy.assertExistingPathAllowed(user, body.path),
+            );
             const atomic = await atomicFileRuntime();
             return json(
-              await atomic.saveTextFileAtomic(body.path, body.content, body.expectedModifiedAt),
+              await atomic.saveTextFileAtomic(target, body.content, body.expectedModifiedAt),
             );
           }
           if (action === "rename") {
-            await auth.requirePermission(request, "rename");
-            const source = await safe.assertSafeExistingMutation(body.path);
-            await safe.assertDestinationAbsent(
+            const user = await auth.requirePermission(request, "rename");
+            const source = await safe.assertSafeExistingMutation(
+              await policy.assertExistingPathAllowed(user, body.path),
+            );
+            const destination = await policy.assertDestinationPathAllowed(
+              user,
               path.join(path.dirname(source), String(body.name || "")),
             );
-            return json(await api.renameEntry(source, body.name));
+            await safe.assertDestinationAbsent(destination);
+            return json(await api.renameEntry(source, path.basename(destination)));
           }
           if (action === "chmod") {
-            await auth.requirePermission(request, "change_permissions");
-            const target = await safe.assertSafeExistingMutation(body.path);
+            const user = await auth.requirePermission(request, "change_permissions");
+            const target = await safe.assertSafeExistingMutation(
+              await policy.assertExistingPathAllowed(user, body.path),
+            );
             return json(await api.changeMode(target, body.mode));
           }
           if (action === "checksum") {
-            await auth.requirePermission(request, "calculate_checksums");
+            const user = await auth.requirePermission(request, "calculate_checksums");
             const hashes = await hashRuntime();
-            return json(await hashes.fileIntegrityHash(body.path, body.algorithm));
+            return json(
+              await hashes.fileIntegrityHash(
+                await policy.assertExistingPathAllowed(user, body.path),
+                body.algorithm,
+              ),
+            );
           }
           if (action === "trash-move") {
             const user = await auth.requirePermission(request, "delete");
-            const target = await safe.assertSafeExistingMutation(body.path);
+            const target = await safe.assertSafeExistingMutation(
+              await policy.assertExistingPathAllowed(user, body.path),
+            );
             return json(await api.moveToTrash(user, target), 201);
           }
           if (action === "trash-restore") {
@@ -298,7 +370,8 @@ export const Route = createFileRoute("/api/local")({
             const trash = await api.listTrash(user);
             const item = trash.items.find((candidate) => candidate.id === String(body.id || ""));
             if (!item) return json({ error: "Trash item not found" }, 404);
-            await safe.assertSafeDestination(item.originalPath);
+            const destination = await policy.assertDestinationPathAllowed(user, item.originalPath);
+            await safe.assertSafeDestination(destination);
             return json(await api.restoreTrashItem(user, body.id));
           }
           if (action === "trash-delete") {
@@ -314,9 +387,19 @@ export const Route = createFileRoute("/api/local")({
             const permission =
               operation === "copy" ? "copy" : operation === "move" ? "move" : "permanently_delete";
             const user = await auth.requirePermission(request, permission);
-            const source = await safe.assertSafeExistingMutation(body.source);
-            const destination =
-              operation === "delete" ? undefined : await safe.assertSafeDirectory(body.destination);
+            const source = await safe.assertSafeExistingMutation(
+              await policy.assertExistingPathAllowed(user, body.source),
+            );
+            let destination: string | undefined;
+            if (operation !== "delete") {
+              destination = await safe.assertSafeDirectory(
+                await policy.assertDirectoryPathAllowed(user, body.destination),
+              );
+              await policy.assertDestinationPathAllowed(
+                user,
+                path.join(destination, path.basename(source)),
+              );
+            }
             const operations = await operationRuntime();
             return json(
               { job: await operations.startOperationJob(user.id, operation, source, destination) },
