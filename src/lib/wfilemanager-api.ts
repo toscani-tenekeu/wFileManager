@@ -18,6 +18,7 @@ export interface AuthUser {
   createdAt: string;
   roleName?: string | null;
   permissions?: string[];
+  allowedPaths?: string[];
 }
 
 export interface ProPlanDetails {
@@ -119,7 +120,14 @@ export interface InstanceStatusResponse {
 }
 
 type GatewayScope =
-  "auth" | "login" | "setup" | "roles" | "account" | "users" | "presence" | "notifications";
+  | "auth"
+  | "login"
+  | "setup"
+  | "roles"
+  | "account"
+  | "users"
+  | "presence"
+  | "notifications";
 
 function gatewayUrl(scope: GatewayScope, action: string) {
   const query = new URLSearchParams({ scope, action });
@@ -173,7 +181,7 @@ export const wfilemanagerApi = {
     }),
   me: () => perform<{ user: AuthUser; instance: WFileManagerInstance }>("auth", "me"),
   logout: () => perform<{ success: true }>("auth", "logout", { method: "POST", body: "{}" }),
-  users: () => perform<{ users: AuthUser[] }>("auth", "users"),
+  users: () => perform<{ users: AuthUser[] }>("users", "users"),
   createUser: (data: {
     displayName: string;
     username: string;
@@ -182,8 +190,28 @@ export const wfilemanagerApi = {
     roleId?: string;
     status?: string;
     mustChangePassword?: boolean;
+    allowedPaths?: string[];
   }) =>
-    perform<{ user: AuthUser }>("auth", "users", { method: "POST", body: JSON.stringify(data) }),
+    perform<{ user: AuthUser }>("users", "users", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateUser: (
+    id: string,
+    data: {
+      displayName?: string;
+      email?: string | null;
+      password?: string;
+      roleId?: string | null;
+      status?: "active" | "disabled" | "invited";
+      mustChangePassword?: boolean;
+      allowedPaths?: string[];
+    },
+  ) =>
+    perform<{ user: AuthUser }>("users", "users", {
+      method: "PATCH",
+      body: JSON.stringify({ id, ...data }),
+    }),
   deleteUser: (id: string) =>
     perform<{ success: true; deleted: { id: string; username: string; displayName: string } }>(
       "users",
@@ -213,10 +241,18 @@ export const wfilemanagerApi = {
       body: JSON.stringify({ all: true }),
     }),
   rolePermissions: () =>
-    perform<{ roleId: string | null; roleName: string | null; permissions: string[] }>(
-      "roles",
-      "permissions",
-    ),
+    perform<{
+      roleId: string | null;
+      roleName: string | null;
+      permissions: string[];
+      pathRules?: Array<{
+        id?: string;
+        path: string;
+        accessMode: "allow" | "deny";
+        recursive: boolean;
+        source?: "user" | "role";
+      }>;
+    }>("roles", "permissions"),
   roles: () => perform<{ roles: WFileManagerRole[] }>("roles", "roles"),
   createRole: (data: { name: string; description?: string; permissions: string[] }) =>
     perform<{ role: WFileManagerRole }>("roles", "roles", {
