@@ -22,6 +22,9 @@ export interface DirectoryResult {
   path: string;
   realPath: string;
   entries: LocalFileEntry[];
+  total?: number;
+  nextCursor?: string | null;
+  truncated?: boolean;
 }
 
 export interface TrashItem {
@@ -49,7 +52,7 @@ export interface ProgressState {
 export interface OperationJob {
   id: string;
   operation: "copy" | "move" | "delete";
-  status: "queued" | "running" | "completed" | "failed";
+  status: "queued" | "running" | "cancelling" | "cancelled" | "completed" | "failed" | "interrupted";
   progress: number;
   processedBytes: number;
   totalBytes: number;
@@ -137,21 +140,18 @@ async function parse<T>(response: Response): Promise<T> {
 }
 
 function headers(json = true): HeadersInit {
-  const token = wfilemanagerApi.getToken();
-  return {
-    ...(json ? { "Content-Type": "application/json" } : {}),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+  return json ? { "Content-Type": "application/json" } : {};
 }
 
 async function get<T>(action: string, params: Record<string, string> = {}) {
   const query = new URLSearchParams({ action, ...params });
-  return parse<T>(await fetch(`/api/local?${query}`, { headers: headers(false), cache: "no-store" }));
+  return parse<T>(await fetch(`/api/local?${query}`, { credentials: "same-origin", headers: headers(false), cache: "no-store" }));
 }
 
 async function post<T>(action: string, body: Record<string, unknown>) {
   return parse<T>(await fetch(`/api/local?action=${encodeURIComponent(action)}`, {
     method: "POST",
+    credentials: "same-origin",
     headers: headers(true),
     body: JSON.stringify(body),
   }));
@@ -176,9 +176,8 @@ function uploadSingleFile(path: string, file: File, onProgress?: (loaded: number
     const abort = () => xhr.abort();
     const cleanup = () => signal?.removeEventListener("abort", abort);
     xhr.open("POST", `/api/local?${query}`);
+    xhr.withCredentials = true;
     xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
-    const token = wfilemanagerApi.getToken();
-    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.upload.onprogress = (event) => onProgress?.(event.loaded);
     xhr.onerror = () => {
       cleanup();
@@ -229,8 +228,11 @@ async function uploadWithProgress(path: string, files: FileList | File[], onProg
 async function runJob(operation: "copy" | "move" | "delete", source: string, destination: string | undefined, onProgress?: (job: OperationJob) => void) {
   const started = await post<{ job: OperationJob }>("job-start", { operation, source, destination });
   onProgress?.(started.job);
-  while (true) {
-    await new Promise((resolve) => setTimeout(resolve, 350));
+  const deadline = Date.now() + 24 * 60 * 60 * 1000;
+  let delay = 500;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    delay = Math.min(2_000, Math.round(delay * 1.25));
     const current = await get<{ job: OperationJob }>("job", { id: started.job.id });
     onProgress?.(current.job);
     if (current.job.status === "completed") {
@@ -243,63 +245,32 @@ async function runJob(operation: "copy" | "move" | "delete", source: string, des
       });
       return current.job;
     }
-    if (current.job.status === "failed") throw new Error(current.job.error || `${operation} failed`);
+    if (["failed", "cancelled", "interrupted"].includes(current.job.status)) {
+      throw new Error(current.job.error || `${operation} ${current.job.status}`);
+    }
   }
+  throw new Error(`${operation} did not complete within 24 hours`);
 }
 
 async function downloadWithProgress(path: string, filename: string, onProgress?: (progress: ProgressState) => void, signal?: AbortSignal) {
-  const token = wfilemanagerApi.getToken();
-  const response = await fetch(`/api/local?action=download&path=${encodeURIComponent(path)}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    signal,
-  });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error((payload as { error?: string }).error || "Download failed");
-  }
-
-  const total = Number(response.headers.get("content-length") || 0);
-  const reader = response.body?.getReader();
-  const chunks: Uint8Array[] = [];
-  let loaded = 0;
-  onProgress?.({ loaded, total, percent: 0, detail: filename });
-
-  if (reader) {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (signal?.aborted) {
-        await reader.cancel().catch(() => undefined);
-        throw abortError("Download cancelled");
-      }
-      if (value) {
-        chunks.push(value);
-        loaded += value.byteLength;
-        onProgress?.({ loaded, total, percent: total ? Math.min(100, Math.round((loaded / total) * 100)) : 0, detail: filename });
-      }
-    }
-  } else {
-    const buffer = new Uint8Array(await response.arrayBuffer());
-    chunks.push(buffer);
-    loaded = buffer.byteLength;
-  }
-
-  const blob = new Blob(chunks as BlobPart[], { type: response.headers.get("content-type") || "application/octet-stream" });
-  const url = URL.createObjectURL(blob);
+  if (signal?.aborted) throw abortError(`Download cancelled for ${filename}`);
+  onProgress?.({ loaded: 0, total: 0, percent: 0, detail: filename });
+  const query = new URLSearchParams({ action: "download", path });
   const link = document.createElement("a");
-  link.href = url;
+  link.href = `/api/local?${query}`;
   link.download = filename;
+  link.rel = "noopener";
+  link.style.display = "none";
   document.body.appendChild(link);
   link.click();
   link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  onProgress?.({ loaded: total || loaded, total: total || loaded, percent: 100, detail: filename });
-  notifySilently({ title: "Download completed", message: `${filename} was downloaded.`, tone: "success", source: "download" });
-  return { downloaded: path, size: loaded };
+  onProgress?.({ loaded: 0, total: 0, percent: 100, detail: "Download handed to the browser" });
+  notifySilently({ title: "Download started", message: `${filename} is being streamed by your browser.`, tone: "info", source: "download" });
+  return { downloaded: path, size: 0, started: true };
 }
 
 export const localApi = {
-  list: (path: string) => get<DirectoryResult>("list", { path }),
+  list: (path: string, cursor?: string, query?: string) => get<DirectoryResult>("list", { path, ...(cursor ? { cursor } : {}), ...(query ? { q: query } : {}) }),
   read: (path: string) => get<{ path: string; content: string; size: number; mime: string; modifiedAt: string; mode: string }>("read", { path }),
   createFile: async (path: string, name: string) => {
     const result = await post<LocalFileEntry>("create-file", { path, name });
@@ -311,12 +282,14 @@ export const localApi = {
     notifySilently({ title: "Folder created", message: result.path, tone: "success", link: `/explorer?path=${encodeURIComponent(path)}`, source: "file-operation" });
     return result;
   },
-  save: (path: string, content: string) => post("save", { path, content }),
+  save: (path: string, content: string, expectedModifiedAt?: string) => post("save", { path, content, expectedModifiedAt }),
   rename: (path: string, name: string) => post("rename", { path, name }),
   delete: (path: string, onProgress?: (job: OperationJob) => void) => runJob("delete", path, undefined, onProgress),
   copy: (source: string, destination: string, onProgress?: (job: OperationJob) => void) => runJob("copy", source, destination, onProgress),
   move: (source: string, destination: string, onProgress?: (job: OperationJob) => void) => runJob("move", source, destination, onProgress),
+  cancelJob: (id: string) => post<{ job: OperationJob }>("job-cancel", { id }),
   chmod: (path: string, mode: string) => post("chmod", { path, mode }),
+  checksum: (path: string, algorithm: "sha256" | "sha512" = "sha256") => post<{ path: string; algorithm: string; checksum: string }>("checksum", { path, algorithm }),
   trash: {
     list: () => get<TrashResult>("trash-list"),
     move: async (path: string) => {
