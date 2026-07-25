@@ -1,13 +1,9 @@
-import { randomBytes, scryptSync } from "node:crypto";
+import { randomBytes, randomUUID, scryptSync } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import {
-  SqliteAuthError,
-  listUsers,
-  passwordPolicyError,
-  type SqliteUserActor,
-} from "@/lib/server/sqlite-store";
-import { normalizeAllowedPaths, replaceUserPathRules, pathRulesForUser } from "@/lib/server/sqlite-path-policy";
+import { SqliteAuthError, listUsers, passwordPolicyError } from "@/lib/server/sqlite-store";
+import { normalizeAllowedPaths, pathRulesForUser } from "@/lib/server/sqlite-path-policy";
 
+type Actor = Record<string, any>;
 const DB_PATH = process.env.WFILEMANAGER_SQLITE_PATH || "/var/lib/wfilemanager/wfilemanager.db";
 let database: DatabaseSync | null = null;
 
@@ -18,11 +14,9 @@ function db() {
   }
   return database;
 }
-
 function clean(value: unknown) {
   return String(value ?? "").trim();
 }
-
 function roleName(roleId: string | null) {
   if (!roleId) return null;
   const row = db().prepare("SELECT name FROM wfm_roles WHERE id = ?").get(roleId) as
@@ -30,7 +24,6 @@ function roleName(roleId: string | null) {
     | undefined;
   return row?.name || null;
 }
-
 function publicUser(row: Record<string, unknown>) {
   const isAdmin = Boolean(row.is_admin);
   return {
@@ -56,7 +49,6 @@ function publicUser(row: Record<string, unknown>) {
       .map((rule) => rule.path),
   };
 }
-
 function assertRole(roleId: string | null) {
   if (!roleId) return;
   const row = db().prepare("SELECT name FROM wfm_roles WHERE id = ?").get(roleId) as
@@ -66,33 +58,47 @@ function assertRole(roleId: string | null) {
   if (String(row.name).toLowerCase() === "administrator")
     throw new SqliteAuthError(400, "The Administrator role cannot be assigned to another account.");
 }
-
 function passwordCredential(password: string) {
   const policyError = passwordPolicyError(password);
   if (policyError) throw new SqliteAuthError(400, policyError);
   const salt = randomBytes(16).toString("hex");
   return { salt, hash: scryptSync(password, Buffer.from(salt, "hex"), 64).toString("hex") };
 }
+function replaceRules(connection: DatabaseSync, userId: string, pathsInput: unknown) {
+  const paths = normalizeAllowedPaths(pathsInput);
+  connection.prepare("DELETE FROM wfm_path_rules WHERE user_id = ?").run(userId);
+  const insert = connection.prepare(
+    "INSERT INTO wfm_path_rules(id,user_id,path,access_mode,recursive,created_at) VALUES(?, ?, ?, 'allow', 1, ?)",
+  );
+  const createdAt = new Date().toISOString();
+  for (const allowedPath of paths) insert.run(randomUUID(), userId, allowedPath, createdAt);
+  return paths;
+}
 
 export function createSqliteUserWithPaths(
-  actor: SqliteUserActor,
-  create: (actor: SqliteUserActor, data: Record<string, unknown>) => { user: { id: string } },
+  actor: Actor,
+  create: (actor: any, data: Record<string, unknown>) => { user: { id: string } },
   payload: Record<string, unknown>,
 ) {
   const roleId = clean(payload.roleId) || null;
   assertRole(roleId);
-  const allowedPaths = normalizeAllowedPaths(payload.allowedPaths);
   const result = create(actor, { ...payload, roleId });
-  replaceUserPathRules(result.user.id, allowedPaths);
-  const row = db().prepare("SELECT * FROM wfm_users WHERE id = ?").get(result.user.id) as Record<
+  const connection = db();
+  try {
+    replaceRules(connection, result.user.id, payload.allowedPaths);
+  } catch (error) {
+    connection.prepare("DELETE FROM wfm_users WHERE id = ?").run(result.user.id);
+    throw error;
+  }
+  const row = connection.prepare("SELECT * FROM wfm_users WHERE id = ?").get(result.user.id) as Record<
     string,
     unknown
   >;
   return { user: publicUser(row) };
 }
 
-export function updateSqliteUser(actor: SqliteUserActor, payload: Record<string, unknown>) {
-  listUsers(actor);
+export function updateSqliteUser(actor: Actor, payload: Record<string, unknown>) {
+  listUsers(actor as never);
   const id = clean(payload.id);
   if (!id) throw new SqliteAuthError(400, "User id is required.");
   if (id === String(actor.id))
@@ -155,8 +161,7 @@ export function updateSqliteUser(actor: SqliteUserActor, payload: Record<string,
   connection.exec("BEGIN IMMEDIATE");
   try {
     connection.prepare(`UPDATE wfm_users SET ${updates.join(", ")} WHERE id = ?`).run(...values);
-    if (payload.allowedPaths !== undefined)
-      replaceUserPathRules(id, normalizeAllowedPaths(payload.allowedPaths));
+    if (payload.allowedPaths !== undefined) replaceRules(connection, id, payload.allowedPaths);
     const resulting = connection.prepare("SELECT * FROM wfm_users WHERE id = ?").get(id) as Record<
       string,
       unknown
