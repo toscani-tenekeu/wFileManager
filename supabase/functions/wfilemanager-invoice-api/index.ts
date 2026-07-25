@@ -14,6 +14,18 @@ const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SE
 const encoder = new TextEncoder();
 const BUCKET = "wfilemanager-documents";
 
+type Row = Record<string, any>;
+type Config = {
+  automationSecretHash: string;
+  supportEmail: string;
+  siteUrl: string;
+  legalName: string;
+  legalAddress: string;
+  registrationNumber: string;
+  taxNumber: string;
+  footerNote: string;
+};
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -45,22 +57,26 @@ function safeEqual(left: string, right: string) {
 function bearer(request: Request) {
   return (request.headers.get("authorization") || "").match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || "";
 }
-function pdfText(value: unknown, maximum = 90) {
+function pdfText(value: unknown, maximum = 95) {
   const text = clean(value).replace(/[\u0000-\u001f\u007f]/g, " ");
   return text.length > maximum ? `${text.slice(0, maximum - 1)}…` : text;
 }
-
-async function config() {
+async function config(): Promise<Config> {
   const { data, error } = await db
     .from("wfilemanager_pro_subscription_config")
-    .select("automation_secret_hash,support_email,site_url")
+    .select("*")
     .eq("id", true)
     .maybeSingle();
   if (error) throw error;
   return {
-    automationSecretHash: String(data?.automation_secret_hash || ""),
-    supportEmail: String(data?.support_email || "support@kmerhosting.com"),
-    siteUrl: String(data?.site_url || "https://wfilemanager.com"),
+    automationSecretHash: clean(data?.automation_secret_hash),
+    supportEmail: clean(data?.support_email || "support@kmerhosting.com"),
+    siteUrl: clean(data?.site_url || "https://wfilemanager.com"),
+    legalName: clean(data?.invoice_legal_name || "KmerHosting LLC"),
+    legalAddress: clean(data?.invoice_legal_address),
+    registrationNumber: clean(data?.invoice_registration_number),
+    taxNumber: clean(data?.invoice_tax_number),
+    footerNote: clean(data?.invoice_footer_note),
   };
 }
 async function automationAuthorized(request: Request, expectedHash: string) {
@@ -72,85 +88,116 @@ async function customerAuth(request: Request) {
   if (!token) return null;
   const { data, error } = await db
     .from("wfilemanager_customer_sessions")
-    .select("id,customer_id,wfilemanager_customer_accounts(id,email,full_name,status)")
+    .select("id,customer_id,wfilemanager_customer_accounts(*)")
     .eq("token_hash", await sha256(token))
     .is("revoked_at", null)
     .gt("expires_at", new Date().toISOString())
     .maybeSingle();
   if (error) throw error;
-  const customer = data?.wfilemanager_customer_accounts as any;
+  const customer = data?.wfilemanager_customer_accounts as Row | undefined;
   if (!customer || customer.status !== "active") return null;
   return customer;
 }
 function invoiceNumber(type: string, reference: string) {
   const month = new Date().toISOString().slice(0, 7).replace("-", "");
-  const suffix = reference
-    .replace(/[^A-Za-z0-9]/g, "")
-    .slice(-14)
-    .toUpperCase();
+  const suffix = reference.replace(/[^A-Za-z0-9]/g, "").slice(-14).toUpperCase();
   const prefix =
     type === "topup" ? "RCT" : type === "renewal" ? "REN" : type === "storage" ? "STO" : "INV";
   return `WFM-${prefix}-${month}-${suffix}`;
+}
+function description(type: string) {
+  return type === "renewal"
+    ? "wFileManager Pro annual renewal"
+    : type === "topup"
+      ? "wFileManager customer account top-up"
+      : type === "storage"
+        ? "wFileManager Pro managed storage upgrade"
+        : "wFileManager Pro licence — one instance, one year";
 }
 
 async function renderPdf(params: {
   invoiceNumber: string;
   type: string;
-  customerName: string;
-  customerEmail: string;
+  customer: Row;
   amountUsd: number;
   reference: string;
   issuedAt: string;
-  description: string;
-  supportEmail: string;
+  config: Config;
 }) {
   const pdf = await PDFDocument.create();
   const page = pdf.addPage([595.28, 841.89]);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const draw = (text: string, x: number, y: number, size = 11, useBold = false) =>
-    page.drawText(pdfText(text), {
+  const draw = (text: string, x: number, y: number, size = 10, useBold = false, max = 95) =>
+    page.drawText(pdfText(text, max), {
       x,
       y,
       size,
       font: useBold ? bold : regular,
       color: rgb(0.08, 0.1, 0.15),
     });
+
   draw("wFileManager", 48, 785, 22, true);
-  draw(params.type === "topup" ? "RECEIPT" : "INVOICE", 455, 785, 14, true);
+  draw(params.type === "topup" ? "RECEIPT" : "INVOICE", 445, 785, 14, true);
   page.drawLine({
     start: { x: 48, y: 760 },
     end: { x: 547, y: 760 },
     thickness: 1,
     color: rgb(0.82, 0.84, 0.88),
   });
-  draw(params.invoiceNumber, 48, 728, 12, true);
-  draw(`Issued: ${new Date(params.issuedAt).toUTCString()}`, 48, 707, 10);
-  draw("Bill to", 48, 660, 11, true);
-  draw(params.customerName || "Customer", 48, 640, 11);
-  draw(params.customerEmail, 48, 621, 10);
-  draw("Description", 48, 550, 10, true);
-  draw("Amount", 465, 550, 10, true);
+  draw(params.invoiceNumber, 48, 730, 12, true);
+  draw(`Issued: ${new Date(params.issuedAt).toUTCString()}`, 48, 710, 9);
+
+  draw("Supplier", 48, 670, 10, true);
+  draw(params.config.legalName, 48, 651, 10);
+  let supplierY = 634;
+  if (params.config.legalAddress) {
+    draw(params.config.legalAddress, 48, supplierY, 9);
+    supplierY -= 16;
+  }
+  if (params.config.registrationNumber) {
+    draw(`Registration: ${params.config.registrationNumber}`, 48, supplierY, 9);
+    supplierY -= 16;
+  }
+  if (params.config.taxNumber) draw(`Tax number: ${params.config.taxNumber}`, 48, supplierY, 9);
+
+  draw("Bill to", 320, 670, 10, true);
+  draw(params.customer.full_name || "Customer", 320, 651, 10);
+  draw(params.customer.email, 320, 634, 9);
+  draw(params.customer.company || "", 320, 617, 9);
+  draw(params.customer.billing_address || "", 320, 600, 9);
+  draw(
+    [params.customer.billing_postal_code, params.customer.billing_city, params.customer.country]
+      .filter(Boolean)
+      .join(" "),
+    320,
+    583,
+    9,
+  );
+
+  draw("Description", 48, 525, 10, true);
+  draw("Amount", 460, 525, 10, true);
   page.drawLine({
-    start: { x: 48, y: 539 },
-    end: { x: 547, y: 539 },
+    start: { x: 48, y: 514 },
+    end: { x: 547, y: 514 },
     thickness: 1,
     color: rgb(0.82, 0.84, 0.88),
   });
-  draw(params.description, 48, 512, 11);
-  draw(`$${params.amountUsd.toFixed(2)} USD`, 455, 512, 11, true);
+  draw(description(params.type), 48, 486, 11, false, 68);
+  draw(`$${params.amountUsd.toFixed(2)} USD`, 445, 486, 11, true);
   page.drawLine({
-    start: { x: 48, y: 490 },
-    end: { x: 547, y: 490 },
+    start: { x: 48, y: 464 },
+    end: { x: 547, y: 464 },
     thickness: 1,
     color: rgb(0.82, 0.84, 0.88),
   });
-  draw("Total", 390, 455, 12, true);
-  draw(`$${params.amountUsd.toFixed(2)} USD`, 455, 455, 12, true);
-  draw(`Reference: ${params.reference}`, 48, 405, 9);
-  draw("Currency: USD", 48, 387, 9);
-  draw("KmerHosting LLC · wFileManager", 48, 95, 9, true);
-  draw(`Technical support: ${params.supportEmail}`, 48, 78, 9);
+  draw("Total", 385, 430, 12, true);
+  draw(`$${params.amountUsd.toFixed(2)} USD`, 445, 430, 12, true);
+  draw(`Reference: ${params.reference}`, 48, 380, 9);
+  draw("Currency: USD", 48, 362, 9);
+  draw(`Support: ${params.config.supportEmail}`, 48, 96, 9);
+  draw(params.config.siteUrl, 48, 79, 9);
+  if (params.config.footerNote) draw(params.config.footerNote, 48, 62, 8, false, 115);
   return new Uint8Array(await pdf.save());
 }
 
@@ -164,43 +211,18 @@ async function existingInvoice(orderId?: string | null, topupId?: string | null)
   return data;
 }
 
-async function createInvoice(params: {
-  customer: any;
+async function reserveInvoice(params: {
+  customer: Row;
   type: "licence" | "renewal" | "topup" | "storage";
   amountUsd: number;
   reference: string;
   orderId?: string | null;
   topupId?: string | null;
   issuedAt?: string | null;
-  supportEmail: string;
 }) {
   const found = await existingInvoice(params.orderId, params.topupId);
   if (found) return found;
   const number = invoiceNumber(params.type, params.reference);
-  const issuedAt = params.issuedAt || new Date().toISOString();
-  const descriptions = {
-    licence: "wFileManager Pro licence — one instance, one year",
-    renewal: "wFileManager Pro annual renewal",
-    topup: "wFileManager customer account top-up",
-    storage: "wFileManager Pro managed storage upgrade",
-  };
-  const bytes = await renderPdf({
-    invoiceNumber: number,
-    type: params.type,
-    customerName: params.customer.full_name || "Customer",
-    customerEmail: params.customer.email,
-    amountUsd: params.amountUsd,
-    reference: params.reference,
-    issuedAt,
-    description: descriptions[params.type],
-    supportEmail: params.supportEmail,
-  });
-  const path = `customers/${params.customer.id}/${number}.pdf`;
-  const upload = await db.storage
-    .from(BUCKET)
-    .upload(path, bytes, { contentType: "application/pdf", cacheControl: "3600", upsert: false });
-  if (upload.error && !String(upload.error.message).toLowerCase().includes("already exists"))
-    throw upload.error;
   const { data, error } = await db
     .from("wfilemanager_invoices")
     .insert({
@@ -209,35 +231,94 @@ async function createInvoice(params: {
       order_id: params.orderId || null,
       topup_id: params.topupId || null,
       invoice_type: params.type,
-      status: "paid",
+      status: "generating",
       currency: "USD",
       amount_usd: params.amountUsd,
-      issued_at: issuedAt,
-      pdf_storage_path: path,
+      issued_at: params.issuedAt || new Date().toISOString(),
+      pdf_storage_path: null,
       metadata: { reference: params.reference },
     })
     .select("*")
     .single();
   if (error) {
-    if (String(error.code) === "23505") return existingInvoice(params.orderId, params.topupId);
+    if (String(error.code) === "23505") {
+      const concurrent = await existingInvoice(params.orderId, params.topupId);
+      if (concurrent) return concurrent;
+    }
     throw error;
   }
   return data;
 }
 
-async function generateForCustomer(customer: any, supportEmail: string) {
+async function createInvoice(params: {
+  customer: Row;
+  type: "licence" | "renewal" | "topup" | "storage";
+  amountUsd: number;
+  reference: string;
+  orderId?: string | null;
+  topupId?: string | null;
+  issuedAt?: string | null;
+  config: Config;
+}) {
+  const invoice = await reserveInvoice(params);
+  if (invoice.status === "paid" && invoice.pdf_storage_path) return invoice;
+  const storagePath = `customers/${params.customer.id}/${invoice.invoice_number}.pdf`;
+  try {
+    const bytes = await renderPdf({
+      invoiceNumber: invoice.invoice_number,
+      type: params.type,
+      customer: params.customer,
+      amountUsd: params.amountUsd,
+      reference: params.reference,
+      issuedAt: invoice.issued_at,
+      config: params.config,
+    });
+    const upload = await db.storage.from(BUCKET).upload(storagePath, bytes, {
+      contentType: "application/pdf",
+      cacheControl: "3600",
+      upsert: false,
+    });
+    if (upload.error && !String(upload.error.message).toLowerCase().includes("already exists"))
+      throw upload.error;
+    const { data, error } = await db
+      .from("wfilemanager_invoices")
+      .update({
+        status: "paid",
+        pdf_storage_path: storagePath,
+        metadata: { ...(invoice.metadata || {}), reference: params.reference, generatedAt: new Date().toISOString() },
+      })
+      .eq("id", invoice.id)
+      .select("*")
+      .single();
+    if (error) {
+      await db.storage.from(BUCKET).remove([storagePath]);
+      throw error;
+    }
+    return data;
+  } catch (error) {
+    await db
+      .from("wfilemanager_invoices")
+      .update({
+        status: "failed",
+        metadata: {
+          ...(invoice.metadata || {}),
+          reference: params.reference,
+          generationError: error instanceof Error ? error.message : "Invoice generation failed",
+          failedAt: new Date().toISOString(),
+        },
+      })
+      .eq("id", invoice.id);
+    throw error;
+  }
+}
+
+async function generateForCustomer(customer: Row, settings: Config) {
   for (let from = 0; ; from += 200) {
     const { data: orders, error } = await db
       .from("wfilemanager_pro_orders")
       .select("id,order_reference,order_type,status,amount_usd,paid_at")
       .eq("customer_id", customer.id)
-      .in("status", [
-        "paid",
-        "activation_sent",
-        "renewal_applied",
-        "upgrade_applied",
-        "email_failed",
-      ])
+      .in("status", ["paid", "activation_sent", "renewal_applied", "upgrade_applied", "email_failed"])
       .order("created_at", { ascending: true })
       .range(from, from + 199);
     if (error) throw error;
@@ -255,7 +336,7 @@ async function generateForCustomer(customer: any, supportEmail: string) {
         reference: order.order_reference,
         orderId: order.id,
         issuedAt: order.paid_at,
-        supportEmail,
+        config: settings,
       });
     }
     if (!orders || orders.length < 200) break;
@@ -277,17 +358,18 @@ async function generateForCustomer(customer: any, supportEmail: string) {
         reference: topup.topup_reference,
         topupId: topup.id,
         issuedAt: topup.credited_at,
-        supportEmail,
+        config: settings,
       });
     if (!topups || topups.length < 200) break;
   }
 }
 
-async function listCustomerInvoices(customer: any) {
+async function listCustomerInvoices(customer: Row) {
   const { data, error } = await db
     .from("wfilemanager_invoices")
     .select("*")
     .eq("customer_id", customer.id)
+    .eq("status", "paid")
     .order("issued_at", { ascending: false })
     .limit(100);
   if (error) throw error;
@@ -314,31 +396,31 @@ async function listCustomerInvoices(customer: any) {
   return invoices;
 }
 
-async function generateAll(supportEmail: string) {
+async function generateAll(settings: Config) {
   const results: unknown[] = [];
   let checked = 0;
-  for (let from = 0; ; from += 200) {
+  for (let from = 0; ; from += 100) {
     const { data: customers, error } = await db
       .from("wfilemanager_customer_accounts")
-      .select("id,email,full_name,status")
+      .select("*")
       .eq("status", "active")
       .order("id", { ascending: true })
-      .range(from, from + 199);
+      .range(from, from + 99);
     if (error) throw error;
     for (const customer of customers || []) {
       checked += 1;
       try {
-        await generateForCustomer(customer, supportEmail);
-        results.push({ customerId: customer.id, success: true });
-      } catch (value) {
+        await generateForCustomer(customer, settings);
+        results.push({ customer: customer.id, generated: true });
+      } catch (error) {
         results.push({
-          customerId: customer.id,
-          success: false,
-          error: value instanceof Error ? value.message : "Invoice generation failed",
+          customer: customer.id,
+          generated: false,
+          error: error instanceof Error ? error.message : "Generation failed",
         });
       }
     }
-    if (!customers || customers.length < 200) break;
+    if (!customers || customers.length < 100) break;
   }
   return { checked, results };
 }
@@ -349,23 +431,17 @@ Deno.serve(async (request: Request) => {
     const action = new URL(request.url).pathname.split("/").filter(Boolean).pop() || "status";
     const settings = await config();
     if (action === "status")
-      return json({
-        ok: true,
-        pdfInvoices: true,
-        privateDownloads: true,
-        generationMode: "automation",
-        currency: "USD",
-      });
+      return json({ ok: true, privateDocuments: true, signedDownloads: true, orphanSafe: true });
     if (action === "invoices" && request.method === "GET") {
       const customer = await customerAuth(request);
       if (!customer) return json({ error: "Authentication required" }, 401);
       return json({ invoices: await listCustomerInvoices(customer) });
     }
-    if (action === "run" && request.method === "POST") {
-      if (!(await automationAuthorized(request, settings.automationSecretHash)))
-        return json({ error: "Unauthorized automation request" }, 401);
-      return json({ ok: true, invoices: await generateAll(settings.supportEmail) });
-    }
+    if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+    if (!(await automationAuthorized(request, settings.automationSecretHash)))
+      return json({ error: "Unauthorized invoice automation" }, 401);
+    if (action === "run" || action === "generate")
+      return json({ ok: true, generation: await generateAll(settings) });
     return json({ error: "Not found" }, 404);
   } catch (error) {
     console.error(error);
