@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import path from "node:path";
-import { chmod, open, rename, rm, stat } from "node:fs/promises";
+import { chmod, chown, open, rename, rm, stat } from "node:fs/promises";
 import { LocalApiError, readTextFile } from "@/lib/server/local-runtime";
 import { assertSafeExistingMutation } from "@/lib/server/safe-path-runtime";
 
@@ -18,16 +18,17 @@ export async function saveTextFileAtomic(
   const target = await assertSafeExistingMutation(inputPath);
   const current = await stat(target);
   if (!current.isFile()) throw new LocalApiError(400, "The selected path is not a regular file");
-
-  if (typeof expectedModifiedAt === "string" && expectedModifiedAt) {
-    const expected = new Date(expectedModifiedAt).getTime();
-    if (!Number.isFinite(expected) || Math.abs(current.mtimeMs - expected) > 1) {
-      throw new LocalApiError(
-        409,
-        "The file changed after it was opened. Reload it before saving to avoid overwriting another change.",
-      );
-    }
-  }
+  if (typeof expectedModifiedAt !== "string" || !expectedModifiedAt)
+    throw new LocalApiError(
+      428,
+      "The file version is required. Reload the file before saving to prevent an accidental overwrite.",
+    );
+  const expected = new Date(expectedModifiedAt).getTime();
+  if (!Number.isFinite(expected) || Math.abs(current.mtimeMs - expected) > 1)
+    throw new LocalApiError(
+      409,
+      "The file changed after it was opened. Reload it before saving to avoid overwriting another change.",
+    );
 
   const temporary = path.join(
     path.dirname(target),
@@ -40,6 +41,7 @@ export async function saveTextFileAtomic(
     await handle.sync();
     await handle.close();
     handle = null;
+    await chown(temporary, current.uid, current.gid);
     await chmod(temporary, current.mode & 0o7777);
     await rename(temporary, target);
 
