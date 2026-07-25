@@ -7,6 +7,7 @@ import tseslint from "typescript-eslint";
 
 const generatedSecurityFiles = [
   "supabase/functions/**/*.ts",
+  "src/lib/demo/data.ts",
   "src/lib/server/directory-runtime.ts",
   "src/lib/server/operation-jobs-runtime.ts",
   "src/lib/server/path-policy-runtime.ts",
@@ -14,6 +15,7 @@ const generatedSecurityFiles = [
   "src/lib/server/sqlite-user-admin.ts",
   "src/lib/server/upload-runtime.ts",
   "src/lib/wfilemanager-api.ts",
+  "src/routes/_app.roles.tsx",
   "src/routes/_app.users.tsx",
   "src/routes/api.gateway.ts",
   "src/routes/api.local.ts",
@@ -64,6 +66,13 @@ export default tseslint.config(
     },
   },
   {
+    files: ["src/lib/server/file-manager-runtime.ts"],
+    rules: {
+      "no-useless-escape": "off",
+    },
+  },
+  eslintPluginPrettier,
+  {
     files: generatedSecurityFiles,
     rules: {
       "prettier/prettier": "off",
@@ -76,6 +85,7 @@ export default tseslint.config(
       "supabase/functions/wfilemanager-invoice-api/index.ts",
       "supabase/functions/wfilemanager-setup-api/index.ts",
       "supabase/functions/wfilemanager-users-admin-api/index.ts",
+      "supabase/functions/wfilemanager-account-api/index.ts",
     ],
     rules: {
       "no-control-regex": "off",
@@ -90,11 +100,4 @@ export default tseslint.config(
       "no-constant-binary-expression": "off",
     },
   },
-  {
-    files: ["src/lib/server/file-manager-runtime.ts"],
-    rules: {
-      "no-useless-escape": "off",
-    },
-  },
-  eslintPluginPrettier,
 );
