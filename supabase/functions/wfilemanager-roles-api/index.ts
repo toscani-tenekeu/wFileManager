@@ -5,6 +5,7 @@ const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-wfilemanager-instance",
   "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
+  "Cache-Control": "no-store",
 };
 const respond = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -15,6 +16,7 @@ const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SE
   auth: { persistSession: false },
 });
 const encoder = new TextEncoder();
+
 const PERMISSIONS = [
   "browse",
   "view",
@@ -34,16 +36,18 @@ const PERMISSIONS = [
   "restore",
   "permanently_delete",
   "change_permissions",
-  "change_owner",
-  "change_group",
-  "create_symlinks",
   "calculate_checksums",
-  "use_terminal",
   "view_logs",
   "manage_users",
   "manage_roles",
-  "change_settings",
 ] as const;
+
+type Authenticated = {
+  instance: Record<string, any>;
+  session: Record<string, any>;
+  user: Record<string, any>;
+  role: Record<string, any> | null;
+};
 
 const bytesToHex = (bytes: Uint8Array) =>
   Array.from(bytes)
@@ -74,17 +78,28 @@ const roleJson = (role: any, members = 0) => ({
   updatedAt: role.updated_at,
 });
 
-async function authenticate(req: Request, instanceKey: string) {
+function pathRuleJson(rule: Record<string, any>) {
+  return {
+    id: String(rule.id),
+    path: String(rule.path || "/"),
+    accessMode: rule.access_mode === "deny" ? "deny" : "allow",
+    recursive: rule.recursive !== false,
+    source: rule.user_id ? "user" : "role",
+  };
+}
+
+async function authenticate(req: Request, instanceKey: string): Promise<Authenticated | null> {
   const authorization = req.headers.get("authorization") || "";
   const token = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
   if (!token) return null;
-  const { data: instance } = await db
+  const { data: instance, error: instanceError } = await db
     .from("wfilemanager_instances")
     .select("*")
     .eq("instance_key", instanceKey)
+    .eq("status", "active")
     .maybeSingle();
-  if (!instance) return null;
-  const { data: session } = await db
+  if (instanceError || !instance) return null;
+  const { data: session, error: sessionError } = await db
     .from("wfilemanager_sessions")
     .select("*")
     .eq("token_hash", await hash(token))
@@ -92,14 +107,14 @@ async function authenticate(req: Request, instanceKey: string) {
     .is("revoked_at", null)
     .gt("expires_at", new Date().toISOString())
     .maybeSingle();
-  if (!session) return null;
-  const { data: user } = await db
+  if (sessionError || !session) return null;
+  const { data: user, error: userError } = await db
     .from("wfilemanager_users")
     .select("*")
     .eq("id", session.user_id)
     .eq("instance_id", instance.id)
     .maybeSingle();
-  if (!user || user.status !== "active") return null;
+  if (userError || !user || user.status !== "active") return null;
   const { data: role } = user.role_id
     ? await db
         .from("wfilemanager_roles")
@@ -111,7 +126,32 @@ async function authenticate(req: Request, instanceKey: string) {
   return { instance, session, user, role };
 }
 
-async function audit(auth: any, req: Request, action: string, target?: string) {
+async function effectivePathRules(auth: Authenticated) {
+  if (auth.user.is_admin === true) {
+    return [{ id: "administrator-root", path: "/", accessMode: "allow", recursive: true, source: "user" }];
+  }
+  const queries = [
+    db
+      .from("wfilemanager_path_rules")
+      .select("id,user_id,role_id,path,access_mode,recursive")
+      .eq("instance_id", auth.instance.id)
+      .eq("user_id", auth.user.id),
+  ];
+  if (auth.user.role_id) {
+    queries.push(
+      db
+        .from("wfilemanager_path_rules")
+        .select("id,user_id,role_id,path,access_mode,recursive")
+        .eq("instance_id", auth.instance.id)
+        .eq("role_id", auth.user.role_id),
+    );
+  }
+  const results = await Promise.all(queries);
+  for (const result of results) if (result.error) throw result.error;
+  return results.flatMap((result) => (result.data || []).map(pathRuleJson));
+}
+
+async function audit(auth: Authenticated, req: Request, action: string, target?: string) {
   await db.from("wfilemanager_audit_logs").insert({
     instance_id: auth.instance.id,
     user_id: auth.user.id,
@@ -142,6 +182,8 @@ Deno.serve(async (req) => {
         roleId: auth.user.role_id,
         roleName: auth.role?.name || (auth.user.is_admin ? "Administrator" : null),
         permissions: ownPermissions,
+        pathRules: await effectivePathRules(auth),
+        pathAccessDefault: auth.user.is_admin ? "allow" : "deny",
       });
     }
 
@@ -175,7 +217,7 @@ Deno.serve(async (req) => {
 
     if (!auth.user.is_admin && !ownPermissions.includes("manage_roles"))
       return respond({ error: "Forbidden" }, 403);
-    const body: any = await req.json().catch(() => ({}));
+    const body: Record<string, unknown> = await req.json().catch(() => ({}));
 
     if (req.method === "POST") {
       const name = String(body.name || "").trim();
@@ -208,8 +250,8 @@ Deno.serve(async (req) => {
     if (!current) return respond({ error: "Role not found" }, 404);
 
     if (req.method === "PATCH") {
-      if (current.is_system && current.name === "Administrator")
-        return respond({ error: "The Administrator role cannot be modified" }, 403);
+      if (current.is_system)
+        return respond({ error: "System roles cannot be modified" }, 403);
       const updates: Record<string, unknown> = {};
       if (typeof body.name === "string") {
         const name = body.name.trim();
@@ -223,12 +265,14 @@ Deno.serve(async (req) => {
         .from("wfilemanager_roles")
         .update(updates)
         .eq("id", id)
+        .eq("instance_id", auth.instance.id)
         .select()
         .single();
       if (error) throw error;
       const { count } = await db
         .from("wfilemanager_users")
         .select("id", { count: "exact", head: true })
+        .eq("instance_id", auth.instance.id)
         .eq("role_id", id);
       await audit(auth, req, "role.update", data.name);
       return respond({ role: roleJson(data, count || 0) });
@@ -239,9 +283,14 @@ Deno.serve(async (req) => {
       const { count } = await db
         .from("wfilemanager_users")
         .select("id", { count: "exact", head: true })
+        .eq("instance_id", auth.instance.id)
         .eq("role_id", id);
       if ((count || 0) > 0) return respond({ error: "This role is still assigned to users" }, 409);
-      const { error } = await db.from("wfilemanager_roles").delete().eq("id", id);
+      const { error } = await db
+        .from("wfilemanager_roles")
+        .delete()
+        .eq("instance_id", auth.instance.id)
+        .eq("id", id);
       if (error) throw error;
       await audit(auth, req, "role.delete", current.name);
       return respond({ success: true });
@@ -252,9 +301,7 @@ Deno.serve(async (req) => {
     console.error(error);
     const message = error instanceof Error ? error.message : "Unexpected error";
     return respond(
-      {
-        error: message.includes("duplicate key") ? "A role with this name already exists" : message,
-      },
+      { error: message.includes("duplicate key") ? "A role with this name already exists" : message },
       500,
     );
   }
