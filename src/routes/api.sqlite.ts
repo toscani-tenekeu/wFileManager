@@ -104,9 +104,9 @@ function withoutTerminalPermission(payload: Record<string, unknown>) {
   return { ...payload, permissions };
 }
 
-function sanitizeUser<T extends { permissions?: unknown; id?: unknown; roleId?: unknown; isAdmin?: unknown }>(
-  user: T,
-) {
+function sanitizeUser<
+  T extends { permissions?: unknown; id?: unknown; roleId?: unknown; isAdmin?: unknown },
+>(user: T) {
   const id = String(user.id || "");
   const roleId = user.roleId ? String(user.roleId) : null;
   const isAdmin = user.isAdmin === true;
@@ -138,8 +138,8 @@ function sanitizeRole<T extends { permissions?: unknown }>(role: T) {
   };
 }
 
-function sanitizeResult(value: unknown): unknown {
-  if (!value || typeof value !== "object") return value;
+function sanitizeResult(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object") return {};
   const result = value as Record<string, unknown>;
   if (Array.isArray(result.roles))
     return {
@@ -152,14 +152,26 @@ function sanitizeResult(value: unknown): unknown {
     return {
       ...result,
       users: result.users.map((user) =>
-        sanitizeUser(user as { permissions?: unknown; id?: unknown; roleId?: unknown; isAdmin?: unknown }),
+        sanitizeUser(
+          user as {
+            permissions?: unknown;
+            id?: unknown;
+            roleId?: unknown;
+            isAdmin?: unknown;
+          },
+        ),
       ),
     };
   if (result.user && typeof result.user === "object")
     return {
       ...result,
       user: sanitizeUser(
-        result.user as { permissions?: unknown; id?: unknown; roleId?: unknown; isAdmin?: unknown },
+        result.user as {
+          permissions?: unknown;
+          id?: unknown;
+          roleId?: unknown;
+          isAdmin?: unknown;
+        },
       ),
     };
   if ("permissions" in result) return { ...result, permissions: sanitizeRole(result).permissions };
@@ -202,16 +214,19 @@ export const Route = createFileRoute("/api/sqlite")({
           if (scope === "auth" && action === "users") return json(sanitizeResult(listUsers(user)));
           if (scope === "roles" && action === "permissions") {
             const access = rolePermissions(user) as Record<string, unknown>;
+            const current = userResponse(user) as {
+              id: string;
+              roleId?: string | null;
+              isAdmin?: boolean;
+            };
             return json({
               ...sanitizeResult(access),
               pathRules: pathRulesForUser(
-                String((userResponse(user) as { id: string }).id),
-                (userResponse(user) as { roleId?: string | null }).roleId,
-                Boolean((userResponse(user) as { isAdmin?: boolean }).isAdmin),
+                String(current.id),
+                current.roleId,
+                Boolean(current.isAdmin),
               ),
-              pathAccessDefault: (userResponse(user) as { isAdmin?: boolean }).isAdmin
-                ? "allow"
-                : "deny",
+              pathAccessDefault: current.isAdmin ? "allow" : "deny",
             });
           }
           if (scope === "roles" && action === "roles") return json(sanitizeResult(listRoles(user)));
