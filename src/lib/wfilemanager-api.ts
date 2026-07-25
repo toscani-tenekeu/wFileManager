@@ -118,7 +118,15 @@ export interface InstanceStatusResponse {
   instance?: WFileManagerInstance;
 }
 
-type GatewayScope = "auth" | "login" | "roles" | "account" | "users" | "presence" | "notifications";
+type GatewayScope =
+  | "auth"
+  | "login"
+  | "setup"
+  | "roles"
+  | "account"
+  | "users"
+  | "presence"
+  | "notifications";
 
 function gatewayUrl(scope: GatewayScope, action: string) {
   const query = new URLSearchParams({ scope, action });
@@ -161,7 +169,7 @@ export const wfilemanagerApi = {
   clearToken: () => undefined,
   status: () => perform<InstanceStatusResponse>("auth", "status"),
   setup: (data: SetupPayload) =>
-    perform<{ success: true; user: AuthUser }>("auth", "setup", {
+    perform<{ success: true; user: AuthUser }>("setup", "setup", {
       method: "POST",
       body: JSON.stringify(data),
     }),
