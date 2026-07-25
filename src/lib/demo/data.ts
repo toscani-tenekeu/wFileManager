@@ -49,7 +49,11 @@ export const PERMISSION_KEYS = [
   "manage_roles",
 ] as const;
 
-export type PermissionKey = (typeof PERMISSION_KEYS)[number];
+export type PermissionKey =
+  | (typeof PERMISSION_KEYS)[number]
+  | "change_owner"
+  | "change_group"
+  | "create_symlinks";
 
 export const DEMO_ROLES: DemoRole[] = [
   {
