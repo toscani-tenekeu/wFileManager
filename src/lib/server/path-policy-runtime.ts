@@ -1,6 +1,7 @@
 import path from "node:path";
 import { lstat, realpath } from "node:fs/promises";
-import { LocalApiError, normalizeServerPath, type LocalUser } from "@/lib/server/local-runtime";
+import { LocalApiError, normalizeServerPath } from "@/lib/server/local-runtime";
+import type { LocalUser } from "@/lib/server/local-auth-runtime";
 
 export interface LocalPathRule {
   id?: string;
