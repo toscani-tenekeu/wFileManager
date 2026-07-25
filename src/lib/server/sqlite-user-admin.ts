@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID, scryptSync } from "node:crypto";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { SqliteAuthError, listUsers, passwordPolicyError } from "@/lib/server/sqlite-store";
 import { normalizeAllowedPaths, pathRulesForUser } from "@/lib/server/sqlite-path-policy";
 
@@ -111,7 +111,7 @@ export function updateSqliteUser(actor: Actor, payload: Record<string, unknown>)
     throw new SqliteAuthError(409, "The installation administrator cannot be modified.");
 
   const updates: string[] = [];
-  const values: unknown[] = [];
+  const values: SQLInputValue[] = [];
   if (payload.displayName !== undefined) {
     const displayName = clean(payload.displayName);
     if (displayName.length < 2 || displayName.length > 120)
