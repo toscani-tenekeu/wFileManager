@@ -1,61 +1,41 @@
-import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AuthShell, useDemoAction } from "@/components/auth/auth-shell";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export const Route = createFileRoute("/forgot-password")({
-  head: () => ({ meta: [{ title: "Reset password — wFileManager" }] }),
+  head: () => ({ meta: [{ title: "Recover administrator access — wFileManager" }] }),
   component: Page,
 });
 
 function Page() {
-  const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
-  const { loading, run } = useDemoAction();
-
   return (
     <AuthShell
-      title="Forgot your password?"
-      desc="We'll email you a link to reset it."
+      title="Recover administrator access"
+      desc="Password recovery is performed locally on the server and never by an unauthenticated email link."
       footer={
         <Link to="/login" className="hover:text-foreground">
           Back to sign in
         </Link>
       }
     >
-      {sent ? (
-        <div className="rounded-md border border-primary/40 bg-primary/10 p-4 text-sm">
-          If an account exists for <span className="font-mono">{email}</span>, a reset link is on
-          its way.
-        </div>
-      ) : (
-        <form
-          className="space-y-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            run(async () => {
-              setSent(true);
-              toast.success("Reset link sent");
-            });
-          }}
-        >
-          <div className="grid gap-1.5">
-            <Label>Email</Label>
-            <Input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-            />
-          </div>
-          <Button className="w-full" disabled={loading}>
-            {loading ? "Sending…" : "Send reset link"}
-          </Button>
-        </form>
-      )}
+      <div className="space-y-4">
+        <Alert>
+          <AlertDescription>
+            Open an SSH session as root or with sudo access, then run the installed recovery command.
+          </AlertDescription>
+        </Alert>
+        <pre className="overflow-x-auto rounded-md border border-border bg-muted p-3 text-xs">
+          sudo wfilemanager-reset-admin-password
+        </pre>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Pro installations can also be recovered after a server reinstall with the saved Recovery Kit.
+          wFileManager does not pretend to send reset emails for local administrator accounts.
+        </p>
+        <Button asChild className="w-full">
+          <Link to="/login">Return to sign in</Link>
+        </Button>
+      </div>
     </AuthShell>
   );
 }
