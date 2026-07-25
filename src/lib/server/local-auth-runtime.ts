@@ -6,13 +6,31 @@ import {
 import * as remoteRuntime from "@/lib/server/local-runtime";
 
 const DATABASE_MODE = process.env.WFILEMANAGER_DATABASE_MODE === "sqlite" ? "sqlite" : "supabase";
+const COOKIE_NAME = "wfm_session";
 
 export type LocalUser = remoteRuntime.LocalUser;
 export const LocalApiError = remoteRuntime.LocalApiError;
 
+function cookieValue(request: Request, name: string) {
+  const cookies = request.headers.get("cookie") || "";
+  for (const item of cookies.split(";")) {
+    const [key, ...parts] = item.trim().split("=");
+    if (key === name) return decodeURIComponent(parts.join("="));
+  }
+  return "";
+}
+
 function tokenFromRequest(request: Request) {
   const value = request.headers.get("authorization") || "";
-  return value.startsWith("Bearer ") ? value.slice(7).trim() : "";
+  if (value.startsWith("Bearer ")) return value.slice(7).trim();
+  return cookieValue(request, COOKIE_NAME);
+}
+
+function authorizationRequest(request: Request) {
+  const token = tokenFromRequest(request);
+  const headers = new Headers(request.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  return new Request(request.url, { method: request.method, headers });
 }
 
 function assignablePermissions(permissions: unknown) {
@@ -43,7 +61,7 @@ function sqliteUser(request: Request): LocalUser {
 }
 
 export async function requireUser(request: Request): Promise<LocalUser> {
-  const user = DATABASE_MODE === "sqlite" ? sqliteUser(request) : await remoteRuntime.requireUser(request);
+  const user = DATABASE_MODE === "sqlite" ? sqliteUser(request) : await remoteRuntime.requireUser(authorizationRequest(request));
   return { ...user, permissions: assignablePermissions(user.permissions) };
 }
 
@@ -86,7 +104,7 @@ export async function requireAnyPermission(request: Request, permissions: string
 }
 
 export async function verifyCurrentPassword(request: Request, passwordInput: unknown) {
-  if (DATABASE_MODE !== "sqlite") return remoteRuntime.verifyCurrentPassword(request, passwordInput);
+  if (DATABASE_MODE !== "sqlite") return remoteRuntime.verifyCurrentPassword(authorizationRequest(request), passwordInput);
   const token = tokenFromRequest(request);
   const password = typeof passwordInput === "string" ? passwordInput : "";
   if (!token || !password) throw new LocalApiError(400, "Your current password is required");
