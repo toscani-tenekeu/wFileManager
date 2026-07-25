@@ -51,22 +51,20 @@ const GROUPS: Array<{ name: string; permissions: PermissionKey[] }> = [
     name: "Delete and archive",
     permissions: ["delete", "restore", "permanently_delete", "compress", "extract"],
   },
-  {
-    name: "Linux metadata",
-    permissions: ["change_permissions", "change_owner", "change_group", "create_symlinks"],
-  },
-  { name: "Administration", permissions: ["manage_users", "manage_roles"] },
+  { name: "Linux metadata", permissions: ["change_permissions"] },
+  { name: "Administration", permissions: ["view_logs", "manage_users", "manage_roles"] },
 ];
 
 function labelize(value: string) {
   return value.replace(/_/g, " ");
 }
-
 function roleDraft(role: WFileManagerRole) {
   return {
     name: role.name,
     description: role.description,
-    permissions: role.permissions.filter((permission) => permission !== "use_terminal"),
+    permissions: role.permissions.filter((permission) =>
+      (PERMISSION_KEYS as readonly string[]).includes(permission),
+    ),
   };
 }
 
@@ -89,17 +87,14 @@ function Roles() {
     () => roles.find((role) => role.id === activeId) || null,
     [roles, activeId],
   );
-  const administratorLocked = Boolean(active?.isSystem && active.name === "Administrator");
+  const systemLocked = Boolean(active?.isSystem);
 
   const load = async () => {
     setLoading(true);
     setError(null);
     try {
       const result = await wfilemanagerApi.roles();
-      const normalized = result.roles.map((role) => ({
-        ...role,
-        permissions: role.permissions.filter((permission) => permission !== "use_terminal"),
-      }));
+      const normalized = result.roles.map((role) => ({ ...role, ...roleDraft(role) }));
       setRoles(normalized);
       const selected = normalized.find((role) => role.id === activeId) || normalized[0] || null;
       setActiveId(selected?.id || null);
@@ -114,14 +109,14 @@ function Roles() {
   useEffect(() => {
     void load();
   }, []);
-
   useEffect(() => {
     if (active) setDraft(roleDraft(active));
   }, [activeId]);
 
   const toggle = (permission: PermissionKey, target: "draft" | "new") => {
+    if (!(PERMISSION_KEYS as readonly string[]).includes(permission)) return;
     if (target === "draft") {
-      if (administratorLocked) return;
+      if (systemLocked) return;
       setDraft((current) => ({
         ...current,
         permissions: current.permissions.includes(permission)
@@ -139,22 +134,20 @@ function Roles() {
   };
 
   const save = async () => {
-    if (!active) return;
+    if (!active || systemLocked) return;
     setSaving(true);
     try {
       const result = await wfilemanagerApi.updateRole({
         id: active.id,
         name: draft.name.trim(),
         description: draft.description.trim(),
-        permissions: draft.permissions.filter((permission) => permission !== "use_terminal"),
+        permissions: draft.permissions,
       });
-      const normalized = {
-        ...result.role,
-        permissions: result.role.permissions.filter((permission) => permission !== "use_terminal"),
-      };
-      setRoles((current) => current.map((role) => (role.id === normalized.id ? normalized : role)));
-      setDraft(roleDraft(normalized));
-      toast.success(`${normalized.name} saved`);
+      setRoles((current) =>
+        current.map((role) => (role.id === result.role.id ? result.role : role)),
+      );
+      setDraft(roleDraft(result.role));
+      toast.success(`${result.role.name} saved`);
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Unable to save role");
     } finally {
@@ -166,19 +159,16 @@ function Roles() {
     setSaving(true);
     try {
       const result = await wfilemanagerApi.createRole({
-        ...newRole,
-        permissions: newRole.permissions.filter((permission) => permission !== "use_terminal"),
+        name: newRole.name.trim(),
+        description: newRole.description.trim(),
+        permissions: newRole.permissions,
       });
-      const normalized = {
-        ...result.role,
-        permissions: result.role.permissions.filter((permission) => permission !== "use_terminal"),
-      };
-      setRoles((current) => [...current, normalized]);
-      setActiveId(normalized.id);
-      setDraft(roleDraft(normalized));
+      setRoles((current) => [...current, result.role]);
+      setActiveId(result.role.id);
+      setDraft(roleDraft(result.role));
       setNewRole({ name: "", description: "", permissions: ["browse", "view", "read"] });
       setNewOpen(false);
-      toast.success(`${normalized.name} created`);
+      toast.success(`${result.role.name} created`);
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Unable to create role");
     } finally {
@@ -187,14 +177,13 @@ function Roles() {
   };
 
   const remove = async () => {
-    if (!active) return;
+    if (!active || active.isSystem) return;
     setSaving(true);
     try {
       await wfilemanagerApi.deleteRole(active.id);
       const remaining = roles.filter((role) => role.id !== active.id);
       setRoles(remaining);
       setActiveId(remaining[0]?.id || null);
-      if (remaining[0]) setDraft(roleDraft(remaining[0]));
       setDeleteOpen(false);
       toast.success(`${active.name} deleted`);
     } catch (cause) {
@@ -245,23 +234,16 @@ function Roles() {
           <div>
             <h1 className="text-xl font-semibold tracking-tight">Roles & permissions</h1>
             <p className="text-sm text-muted-foreground">
-              Control file-management permissions for application users. Root terminal access is
-              reserved for administrators and is not assignable here.
+              Roles grant operations. Filesystem locations are assigned separately to each user.
             </p>
           </div>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => void load()}
-            aria-label="Refresh roles"
-          >
+          <Button variant="outline" size="icon" onClick={() => void load()} aria-label="Refresh roles">
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
           </Button>
           <Button onClick={() => setNewOpen(true)}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            New role
+            <Plus className="mr-1.5 h-4 w-4" />New role
           </Button>
         </div>
       </div>
@@ -282,8 +264,7 @@ function Roles() {
             <ScrollArea className="max-h-[650px]">
               {loading ? (
                 <div className="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading roles…
+                  <Loader2 className="h-4 w-4 animate-spin" />Loading roles…
                 </div>
               ) : (
                 <ul className="divide-y divide-border">
@@ -299,15 +280,10 @@ function Roles() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 text-sm font-medium">
                             <span className="truncate">{role.name}</span>
-                            {role.isSystem && (
-                              <Badge variant="outline" className="h-4 px-1 text-[10px]">
-                                system
-                              </Badge>
-                            )}
+                            {role.isSystem && <Badge variant="outline">system</Badge>}
                           </div>
                           <div className="mt-0.5 text-xs text-muted-foreground">
-                            {role.members} member{role.members === 1 ? "" : "s"} ·{" "}
-                            {role.permissions.length} permissions
+                            {role.members} member{role.members === 1 ? "" : "s"} · {role.permissions.length} permissions
                           </div>
                         </div>
                       </button>
@@ -330,9 +306,7 @@ function Roles() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <CardTitle className="text-base">{active.name}</CardTitle>
-                    <CardDescription>
-                      {active.members} assigned user{active.members === 1 ? "" : "s"}
-                    </CardDescription>
+                    <CardDescription>{active.members} assigned users</CardDescription>
                   </div>
                   <div className="flex gap-2">
                     {!active.isSystem && (
@@ -343,82 +317,45 @@ function Roles() {
                         disabled={active.members > 0 || saving}
                         onClick={() => setDeleteOpen(true)}
                       >
-                        <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                        Delete
+                        <Trash2 className="mr-1.5 h-3.5 w-3.5" />Delete
                       </Button>
                     )}
                     <Button
                       size="sm"
-                      disabled={saving || administratorLocked || !draft.name.trim()}
+                      disabled={saving || systemLocked || !draft.name.trim()}
                       onClick={() => void save()}
                     >
-                      {saving ? (
-                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Check className="mr-1.5 h-3.5 w-3.5" />
-                      )}
+                      {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
                       Save
                     </Button>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
-                {administratorLocked && (
-                  <Alert>
-                    <AlertDescription>
-                      The Administrator role keeps complete application access, including the
-                      administrator-only terminal.
-                    </AlertDescription>
-                  </Alert>
-                )}
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div className="grid gap-1.5">
-                    <Label>Role name</Label>
+                    <Label>Name</Label>
                     <Input
                       value={draft.name}
-                      disabled={administratorLocked}
+                      disabled={systemLocked}
                       onChange={(event) => setDraft({ ...draft, name: event.target.value })}
                     />
                   </div>
-                  <div className="grid gap-1.5 sm:col-span-2">
+                  <div className="grid gap-1.5">
                     <Label>Description</Label>
-                    <Textarea
+                    <Input
                       value={draft.description}
-                      disabled={administratorLocked}
+                      disabled={systemLocked}
                       onChange={(event) => setDraft({ ...draft, description: event.target.value })}
                     />
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      Permission matrix
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      These permissions control file and account operations. Terminal access is not
-                      a role permission.
-                    </p>
-                  </div>
-                  {!administratorLocked && (
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setDraft({ ...draft, permissions: [...PERMISSION_KEYS] })}
-                      >
-                        Select all
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setDraft({ ...draft, permissions: [] })}
-                      >
-                        Clear
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                {permissionGrid(draft.permissions, "draft", administratorLocked)}
+                {systemLocked && (
+                  <Alert>
+                    <AlertDescription>System roles are immutable.</AlertDescription>
+                  </Alert>
+                )}
+                {permissionGrid(draft.permissions, "draft", systemLocked)}
               </CardContent>
             </>
           )}
@@ -429,37 +366,24 @@ function Roles() {
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Create role</DialogTitle>
-            <DialogDescription>
-              Create a reusable application role. Administrator terminal access cannot be delegated.
-            </DialogDescription>
+            <DialogDescription>Choose only operations implemented by the application.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
-            <div className="grid gap-1.5">
-              <Label>Name</Label>
-              <Input
-                value={newRole.name}
-                onChange={(event) => setNewRole({ ...newRole, name: event.target.value })}
-              />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label>Name</Label>
+                <Input value={newRole.name} onChange={(event) => setNewRole({ ...newRole, name: event.target.value })} />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Description</Label>
+                <Textarea value={newRole.description} onChange={(event) => setNewRole({ ...newRole, description: event.target.value })} />
+              </div>
             </div>
-            <div className="grid gap-1.5">
-              <Label>Description</Label>
-              <Textarea
-                value={newRole.description}
-                onChange={(event) => setNewRole({ ...newRole, description: event.target.value })}
-              />
-            </div>
-            <div className="max-h-[420px] overflow-y-auto pr-1">
-              {permissionGrid(newRole.permissions, "new")}
-            </div>
+            {permissionGrid(newRole.permissions, "new")}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setNewOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={saving || newRole.name.trim().length < 2}
-              onClick={() => void create()}
-            >
+            <Button variant="outline" onClick={() => setNewOpen(false)}>Cancel</Button>
+            <Button disabled={saving || newRole.name.trim().length < 2} onClick={() => void create()}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Create role
             </Button>
           </DialogFooter>
@@ -470,20 +394,18 @@ function Roles() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {active?.name}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This removes the role permanently. Roles assigned to users cannot be deleted.
-            </AlertDialogDescription>
+            <AlertDialogDescription>This role must have no assigned users.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={saving}
+              className="bg-destructive text-destructive-foreground"
               onClick={(event) => {
                 event.preventDefault();
                 void remove();
               }}
             >
-              Delete
+              Delete role
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
