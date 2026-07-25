@@ -15,6 +15,9 @@ const decoder = new TextDecoder();
 const BUCKET = "wfilemanager-backups";
 const MAGIC = encoder.encode("WFMBAK1");
 const PAGE_SIZE = 500;
+const MAX_SNAPSHOT_ROWS = 1_000_000;
+
+type BackupKey = { version: string; secret: string };
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -63,6 +66,7 @@ async function decrypt(secret: string, bytes: Uint8Array) {
   const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
   return JSON.parse(decoder.decode(plaintext));
 }
+
 async function configHash() {
   const { data, error } = await db
     .from("wfilemanager_pro_subscription_config")
@@ -74,20 +78,26 @@ async function configHash() {
 }
 async function authorize(request: Request) {
   const secret = String(request.headers.get("x-wfilemanager-automation-secret") || "").trim();
-  if (!secret) return null;
+  if (!secret) return false;
   const supplied = await digest(encoder.encode(secret));
-  if (!safeEqual(supplied, await configHash())) return null;
-  return secret;
+  return safeEqual(supplied, await configHash());
 }
-function backupKey(automationSecret: string) {
-  const configured = String(Deno.env.get("WFILEMANAGER_BACKUP_ENCRYPTION_KEY") || "").trim();
-  return {
-    secret: configured || automationSecret,
-    version: configured
-      ? String(Deno.env.get("WFILEMANAGER_BACKUP_KEY_VERSION") || "v1")
-      : "legacy-automation-secret",
-    dedicated: Boolean(configured),
-  };
+async function currentKey(): Promise<BackupKey> {
+  const { data, error } = await db.rpc("wfilemanager_backup_current_key");
+  if (error) throw error;
+  const row = data?.[0];
+  if (!row?.version || !row?.secret) throw new Error("The Vault backup keyring is not configured");
+  return { version: String(row.version), secret: String(row.secret) };
+}
+async function keyByVersion(version: string): Promise<BackupKey> {
+  const { data, error } = await db.rpc("wfilemanager_backup_key_by_version", {
+    p_version: version,
+  });
+  if (error) throw error;
+  const row = data?.[0];
+  if (!row?.version || !row?.secret)
+    throw new Error(`Backup encryption key ${version || "unknown"} is unavailable`);
+  return { version: String(row.version), secret: String(row.secret) };
 }
 function policy(now = new Date()) {
   if (now.getUTCDate() === 1) return { snapshotType: "monthly", retentionDays: 190 };
@@ -104,15 +114,14 @@ async function rows(table: string, instanceId: string) {
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
     result.push(...(data || []));
+    if (result.length > MAX_SNAPSHOT_ROWS)
+      throw new Error(`Snapshot row limit exceeded while reading ${table}`);
     if (!data || data.length < PAGE_SIZE) break;
   }
   return result;
 }
-async function createSnapshot(
-  encryptionSecret: string,
-  keyVersion: string,
-  instance: Record<string, unknown>,
-) {
+
+async function createSnapshot(key: BackupKey, instance: Record<string, unknown>) {
   const now = new Date();
   const selectedPolicy = policy(now);
   const [roles, users, settings, notifications, pathRules, auditLogs] = await Promise.all([
@@ -138,7 +147,7 @@ async function createSnapshot(
     },
     data: { roles, users, settings, notifications, pathRules, auditLogs },
   };
-  const encrypted = await encrypt(encryptionSecret, document);
+  const encrypted = await encrypt(key.secret, document);
   const checksum = await digest(encrypted);
   const safeKey = String(instance.instance_key).replace(/[^A-Za-z0-9._-]/g, "_");
   const stamp = now.toISOString().replace(/[:.]/g, "-");
@@ -166,7 +175,7 @@ async function createSnapshot(
         format: document.format,
         encrypted: true,
         cipher: "AES-256-GCM",
-        keyVersion,
+        keyVersion: key.version,
         counts: {
           roles: roles.length,
           users: users.length,
@@ -189,11 +198,8 @@ async function createSnapshot(
     const verificationBytes = new Uint8Array(await downloaded.data.arrayBuffer());
     if (!safeEqual(checksum, await digest(verificationBytes)))
       throw new Error("Backup checksum mismatch");
-    const verifiedDocument = await decrypt(encryptionSecret, verificationBytes);
-    if (
-      verifiedDocument?.format !== document.format ||
-      verifiedDocument?.instance?.id !== instance.id
-    )
+    const verified = await decrypt(key.secret, verificationBytes);
+    if (verified?.format !== document.format || verified?.instance?.id !== instance.id)
       throw new Error("Backup content verification failed");
     await db
       .from("wfilemanager_backup_snapshots")
@@ -216,10 +222,11 @@ async function createSnapshot(
     sizeBytes: encrypted.byteLength,
     checksum,
     retentionUntil,
-    keyVersion,
+    keyVersion: key.version,
   };
 }
-async function runSnapshots(encryptionSecret: string, keyVersion: string) {
+
+async function runSnapshots(key: BackupKey) {
   const results: unknown[] = [];
   let checked = 0;
   for (let from = 0; ; from += 100) {
@@ -245,14 +252,11 @@ async function runSnapshots(encryptionSecret: string, keyVersion: string) {
         continue;
       }
       try {
+        results.push({ instance: instance.instance_key, snapshot: await createSnapshot(key, instance) });
+      } catch (error) {
         results.push({
           instance: instance.instance_key,
-          snapshot: await createSnapshot(encryptionSecret, keyVersion, instance),
-        });
-      } catch (value) {
-        results.push({
-          instance: instance.instance_key,
-          error: value instanceof Error ? value.message : "Snapshot failed",
+          error: error instanceof Error ? error.message : "Snapshot failed",
         });
       }
     }
@@ -260,6 +264,7 @@ async function runSnapshots(encryptionSecret: string, keyVersion: string) {
   }
   return { checked, results };
 }
+
 async function cleanupExpired() {
   let deleted = 0;
   while (true) {
@@ -283,7 +288,8 @@ async function cleanupExpired() {
   }
   return { deleted };
 }
-async function restoreSnapshot(encryptionSecret: string, body: Record<string, unknown>) {
+
+async function restoreSnapshot(body: Record<string, unknown>) {
   const snapshotId = String(body.snapshotId || "").trim();
   const dryRun = body.dryRun !== false;
   if (!snapshotId) throw new Error("snapshotId is required");
@@ -297,12 +303,15 @@ async function restoreSnapshot(encryptionSecret: string, body: Record<string, un
   if (error) throw error;
   if (!snapshot || snapshot.status !== "available" || !snapshot.storage_path)
     throw new Error("Snapshot is unavailable");
+  const keyVersion = String(snapshot.manifest?.keyVersion || "");
+  if (!keyVersion) throw new Error("Snapshot encryption key version is missing");
+  const key = await keyByVersion(keyVersion);
   const downloaded = await db.storage.from(BUCKET).download(snapshot.storage_path);
   if (downloaded.error) throw downloaded.error;
   const bytes = new Uint8Array(await downloaded.data.arrayBuffer());
   if (!safeEqual(String(snapshot.checksum_sha256 || ""), await digest(bytes)))
     throw new Error("Backup checksum mismatch");
-  const document = await decrypt(encryptionSecret, bytes);
+  const document = await decrypt(key.secret, bytes);
   if (String(document?.instance?.id || "") !== String(snapshot.instance_id))
     throw new Error("Snapshot instance mismatch");
   const instanceKey = String((snapshot.wfilemanager_instances as any)?.instance_key || "");
@@ -328,41 +337,44 @@ async function restoreSnapshot(encryptionSecret: string, body: Record<string, un
       .from("wfilemanager_backup_snapshots")
       .update({ restored_at: new Date().toISOString(), restore_error: null })
       .eq("id", snapshot.id);
-  return { snapshotId, instanceKey, ...result };
+  return { snapshotId, instanceKey, keyVersion, ...result };
 }
 
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   try {
     const action = new URL(request.url).pathname.split("/").filter(Boolean).pop() || "status";
-    if (action === "status")
+    if (action === "status") {
+      const key = await currentKey();
       return json({
         ok: true,
         encryptedSnapshots: true,
         cipher: "AES-256-GCM",
         checksumVerification: true,
         transactionalRestore: true,
-        dedicatedEncryptionKeyConfigured: Boolean(
-          Deno.env.get("WFILEMANAGER_BACKUP_ENCRYPTION_KEY"),
-        ),
+        schemaValidatedDryRun: true,
+        dedicatedEncryptionKeyConfigured: true,
+        keyVersion: key.version,
+        rotationSupported: true,
         retention: { dailyDays: 8, weeklyDays: 35, monthlyDays: 190 },
       });
+    }
     if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
-    const automationSecret = await authorize(request);
-    if (!automationSecret) return json({ error: "Unauthorized backup request" }, 401);
-    const key = backupKey(automationSecret);
-    if (action === "run" || action === "snapshot")
+    if (!(await authorize(request))) return json({ error: "Unauthorized backup request" }, 401);
+    if (action === "run" || action === "snapshot") {
+      const key = await currentKey();
       return json({
         ok: true,
-        snapshots: await runSnapshots(key.secret, key.version),
+        snapshots: await runSnapshots(key),
         cleanup: await cleanupExpired(),
-        dedicatedEncryptionKey: key.dedicated,
+        keyVersion: key.version,
       });
+    }
     if (action === "cleanup") return json({ ok: true, cleanup: await cleanupExpired() });
     if (action === "restore")
       return json({
         ok: true,
-        restore: await restoreSnapshot(key.secret, await request.json().catch(() => ({}))),
+        restore: await restoreSnapshot(await request.json().catch(() => ({}))),
       });
     return json({ error: "Not found" }, 404);
   } catch (error) {
