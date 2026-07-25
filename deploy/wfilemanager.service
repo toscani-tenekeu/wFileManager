@@ -11,6 +11,8 @@ WorkingDirectory=/opt/wfilemanager/current
 EnvironmentFile=-/etc/wfilemanager/wfilemanager.env
 Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
+ExecStartPre=/usr/bin/install -d -m 700 /etc/wfilemanager /var/lib/wfilemanager
+ExecStartPre=/usr/bin/bash -c 'umask 077; test -s /etc/wfilemanager/setup-secret.key || openssl rand -hex 32 > /etc/wfilemanager/setup-secret.key'
 ExecStart=/usr/bin/node /opt/wfilemanager/current/.output/server/index.mjs
 Restart=always
 RestartSec=5
@@ -21,7 +23,12 @@ LockPersonality=true
 RestrictRealtime=true
 SystemCallArchitectures=native
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-NoNewPrivileges=false
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
 
 [Install]
 WantedBy=multi-user.target
