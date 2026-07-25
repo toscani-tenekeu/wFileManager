@@ -12,15 +12,10 @@ const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SE
 });
 const encoder = new TextEncoder();
 const PASSWORD_ITERATIONS = 210000;
+const MAX_PATH_RULES = 32;
 
-type Row = Record<string, unknown>;
-
-type Authenticated = {
-  session: Row;
-  actor: Row;
-  instance: Row;
-  permissions: string[];
-};
+type Row = Record<string, any>;
+type Authenticated = { session: Row; actor: Row; instance: Row; permissions: string[] };
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -42,11 +37,9 @@ function randomHex(length = 16) {
   return hex(bytes);
 }
 function hexBytes(value: string) {
-  const bytes = new Uint8Array(value.length / 2);
-  for (let index = 0; index < bytes.length; index += 1) {
-    bytes[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
-  }
-  return bytes;
+  const pairs = value.match(/.{1,2}/g);
+  if (!pairs) throw new Error("Invalid password salt");
+  return new Uint8Array(pairs.map((item) => Number.parseInt(item, 16)));
 }
 async function sha256(value: string) {
   return hex(new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value))));
@@ -68,10 +61,8 @@ function passwordPolicy(password: string) {
   if (!/[A-Z]/.test(password)) return "Password must contain an uppercase letter";
   if (!/[a-z]/.test(password)) return "Password must contain a lowercase letter";
   if (!/[0-9]/.test(password)) return "Password must contain a number";
-  for (const character of password) {
-    const code = character.charCodeAt(0);
-    if (code < 32 || code === 127) return "Password contains unsupported control characters";
-  }
+  if (/[\u0000-\u001f\u007f]/.test(password))
+    return "Password contains unsupported control characters";
   return "";
 }
 function bearer(request: Request) {
@@ -82,7 +73,30 @@ function clientIp(request: Request) {
     .split(",")[0]
     .trim();
 }
-function safeUser(user: Row, roleName?: string | null) {
+function normalizePath(value: unknown) {
+  const raw = clean(value);
+  if (!raw.startsWith("/") || raw.includes("\0") || raw.length > 4096) return null;
+  const parts: string[] = [];
+  for (const part of raw.replace(/\\/g, "/").split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") {
+      if (!parts.length) return null;
+      parts.pop();
+    } else parts.push(part);
+  }
+  return `/${parts.join("/")}` || "/";
+}
+function allowedPaths(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  const result: string[] = [];
+  for (const item of value) {
+    const normalized = normalizePath(item);
+    if (normalized && !result.includes(normalized)) result.push(normalized);
+    if (result.length >= MAX_PATH_RULES) break;
+  }
+  return result;
+}
+function safeUser(user: Row, roleName?: string | null, paths: string[] = []) {
   return {
     id: user.id,
     instanceId: user.instance_id,
@@ -92,11 +106,12 @@ function safeUser(user: Row, roleName?: string | null) {
     displayName: user.display_name,
     timezone: user.timezone || "UTC",
     status: user.status,
-    isAdmin: user.is_admin,
-    mustChangePassword: user.must_change_password,
+    isAdmin: user.is_admin === true,
+    mustChangePassword: user.must_change_password === true,
     lastLoginAt: user.last_login_at,
     createdAt: user.created_at,
     roleName: roleName || null,
+    allowedPaths: user.is_admin === true ? ["/"] : paths,
   };
 }
 
@@ -122,7 +137,6 @@ async function authenticate(request: Request): Promise<Authenticated | null> {
     .eq("status", "active")
     .maybeSingle();
   if (instanceError || !instance) return null;
-
   let permissions: string[] = [];
   if (actor.is_admin === true) permissions = ["manage_users"];
   else if (actor.role_id) {
@@ -133,9 +147,7 @@ async function authenticate(request: Request): Promise<Authenticated | null> {
       .eq("instance_id", instance.id)
       .maybeSingle();
     permissions = Array.isArray(role?.permissions)
-      ? role.permissions.filter(
-          (permission): permission is string => typeof permission === "string",
-        )
+      ? role.permissions.filter((permission): permission is string => typeof permission === "string")
       : [];
   }
   if (!permissions.includes("manage_users")) return null;
@@ -148,6 +160,7 @@ async function audit(
   action: string,
   target?: string,
   result = "success",
+  metadata: Record<string, unknown> = {},
 ) {
   await db.from("wfilemanager_audit_logs").insert({
     instance_id: auth.instance.id,
@@ -156,25 +169,80 @@ async function audit(
     action,
     target: target || null,
     result,
-    metadata: { endpoint: "users-admin" },
+    metadata: { endpoint: "users-admin", ...metadata },
     ip_address: clientIp(request) || null,
     user_agent: request.headers.get("user-agent") || null,
   });
 }
 
-async function listUsers(auth: Authenticated) {
+async function roleFor(auth: Authenticated, roleId: string | null) {
+  if (!roleId) return null;
   const { data, error } = await db
-    .from("wfilemanager_users")
-    .select(
-      "id,instance_id,role_id,username,email,display_name,timezone,status,is_admin,must_change_password,last_login_at,created_at,wfilemanager_roles(name)",
-    )
+    .from("wfilemanager_roles")
+    .select("id,name,is_system")
+    .eq("id", roleId)
     .eq("instance_id", auth.instance.id)
-    .order("is_admin", { ascending: false })
-    .order("username", { ascending: true });
+    .maybeSingle();
   if (error) throw error;
+  if (!data) throw new Error("The selected role does not belong to this installation");
+  if (String(data.name).toLowerCase() === "administrator")
+    throw new Error("The Administrator role cannot be assigned to another account");
+  return data;
+}
+
+async function replacePaths(auth: Authenticated, userId: string, paths: string[]) {
+  const { error: deleteError } = await db
+    .from("wfilemanager_path_rules")
+    .delete()
+    .eq("instance_id", auth.instance.id)
+    .eq("user_id", userId);
+  if (deleteError) throw deleteError;
+  if (!paths.length) return;
+  const { error } = await db.from("wfilemanager_path_rules").insert(
+    paths.map((path) => ({
+      instance_id: auth.instance.id,
+      user_id: userId,
+      role_id: null,
+      path,
+      access_mode: "allow",
+      recursive: true,
+    })),
+  );
+  if (error) throw error;
+}
+
+async function listUsers(auth: Authenticated) {
+  const [{ data: users, error }, { data: rules, error: rulesError }] = await Promise.all([
+    db
+      .from("wfilemanager_users")
+      .select(
+        "id,instance_id,role_id,username,email,display_name,timezone,status,is_admin,must_change_password,last_login_at,created_at,wfilemanager_roles(name)",
+      )
+      .eq("instance_id", auth.instance.id)
+      .order("is_admin", { ascending: false })
+      .order("username", { ascending: true }),
+    db
+      .from("wfilemanager_path_rules")
+      .select("user_id,path,access_mode,recursive")
+      .eq("instance_id", auth.instance.id)
+      .not("user_id", "is", null),
+  ]);
+  if (error) throw error;
+  if (rulesError) throw rulesError;
+  const paths = new Map<string, string[]>();
+  for (const rule of rules || []) {
+    if (!rule.user_id || rule.access_mode !== "allow" || rule.recursive !== true) continue;
+    const values = paths.get(rule.user_id) || [];
+    values.push(String(rule.path));
+    paths.set(rule.user_id, values);
+  }
   return json({
-    users: (data || []).map((user) =>
-      safeUser(user, (user.wfilemanager_roles as { name?: string } | null)?.name || null),
+    users: (users || []).map((user) =>
+      safeUser(
+        user,
+        (user.wfilemanager_roles as { name?: string } | null)?.name || null,
+        paths.get(user.id) || [],
+      ),
     ),
   });
 }
@@ -188,7 +256,8 @@ async function createUser(request: Request, auth: Authenticated, body: Row) {
   const status = ["active", "disabled", "invited"].includes(clean(body.status))
     ? clean(body.status)
     : "active";
-  if (!/^[a-z0-9._-]{3,64}$/.test(username)) {
+  const paths = allowedPaths(body.allowedPaths);
+  if (!/^[a-z0-9._-]{3,64}$/.test(username))
     return json(
       {
         error:
@@ -196,25 +265,16 @@ async function createUser(request: Request, auth: Authenticated, body: Row) {
       },
       400,
     );
-  }
-  if (displayName.length < 2 || displayName.length > 120) {
+  if (displayName.length < 2 || displayName.length > 120)
     return json({ error: "Display name must contain 2 to 120 characters" }, 400);
-  }
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     return json({ error: "Email address is invalid" }, 400);
-  }
   const policyError = passwordPolicy(password);
   if (policyError) return json({ error: policyError }, 400);
-  if (roleId) {
-    const { data: role, error: roleError } = await db
-      .from("wfilemanager_roles")
-      .select("id")
-      .eq("id", roleId)
-      .eq("instance_id", auth.instance.id)
-      .maybeSingle();
-    if (roleError) throw roleError;
-    if (!role)
-      return json({ error: "The selected role does not belong to this installation" }, 400);
+  try {
+    await roleFor(auth, roleId);
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "Invalid role" }, 400);
   }
   const salt = randomHex(16);
   const { data, error } = await db
@@ -241,8 +301,114 @@ async function createUser(request: Request, auth: Authenticated, body: Row) {
       return json({ error: "Username or email already exists" }, 409);
     throw error;
   }
-  await audit(request, auth, "user.create", username);
-  return json({ user: safeUser(data) }, 201);
+  try {
+    await replacePaths(auth, data.id, paths);
+  } catch (error) {
+    await db.from("wfilemanager_users").delete().eq("id", data.id).eq("instance_id", auth.instance.id);
+    throw error;
+  }
+  await audit(request, auth, "user.create", username, "success", { allowedPaths: paths });
+  return json({ user: safeUser(data, null, paths) }, 201);
+}
+
+async function updateUser(request: Request, auth: Authenticated, body: Row) {
+  const id = clean(body.id);
+  if (!id) return json({ error: "User id is required" }, 400);
+  if (id === auth.actor.id) return json({ error: "Use Account settings to edit your own account" }, 400);
+  const { data: target, error: targetError } = await db
+    .from("wfilemanager_users")
+    .select("*")
+    .eq("id", id)
+    .eq("instance_id", auth.instance.id)
+    .maybeSingle();
+  if (targetError) throw targetError;
+  if (!target) return json({ error: "User was not found" }, 404);
+  if (target.is_admin === true) return json({ error: "The installation administrator cannot be modified" }, 409);
+
+  const updates: Row = { updated_at: new Date().toISOString() };
+  if (body.displayName !== undefined) {
+    const displayName = clean(body.displayName);
+    if (displayName.length < 2 || displayName.length > 120)
+      return json({ error: "Display name must contain 2 to 120 characters" }, 400);
+    updates.display_name = displayName;
+  }
+  if (body.email !== undefined) {
+    const email = clean(body.email).toLowerCase() || null;
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      return json({ error: "Email address is invalid" }, 400);
+    updates.email = email;
+  }
+  if (body.status !== undefined) {
+    const status = clean(body.status);
+    if (!["active", "disabled", "invited"].includes(status))
+      return json({ error: "Invalid account status" }, 400);
+    updates.status = status;
+  }
+  if (body.mustChangePassword !== undefined)
+    updates.must_change_password = body.mustChangePassword === true;
+  if (body.roleId !== undefined) {
+    const roleId = clean(body.roleId) || null;
+    try {
+      await roleFor(auth, roleId);
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : "Invalid role" }, 400);
+    }
+    updates.role_id = roleId;
+  }
+  let passwordChanged = false;
+  if (typeof body.password === "string" && body.password) {
+    const policyError = passwordPolicy(body.password);
+    if (policyError) return json({ error: policyError }, 400);
+    const salt = randomHex(16);
+    updates.password_hash = await passwordHash(body.password, salt);
+    updates.password_salt = salt;
+    updates.password_iterations = PASSWORD_ITERATIONS;
+    updates.must_change_password = body.mustChangePassword !== false;
+    passwordChanged = true;
+  }
+
+  const { data, error } = await db
+    .from("wfilemanager_users")
+    .update(updates)
+    .eq("id", id)
+    .eq("instance_id", auth.instance.id)
+    .eq("is_admin", false)
+    .select("*")
+    .single();
+  if (error) {
+    if (String(error.code) === "23505") return json({ error: "Email already exists" }, 409);
+    throw error;
+  }
+  let paths: string[] = [];
+  if (body.allowedPaths !== undefined) {
+    paths = allowedPaths(body.allowedPaths);
+    await replacePaths(auth, id, paths);
+  } else {
+    const { data: existing, error: pathError } = await db
+      .from("wfilemanager_path_rules")
+      .select("path")
+      .eq("instance_id", auth.instance.id)
+      .eq("user_id", id)
+      .eq("access_mode", "allow")
+      .eq("recursive", true);
+    if (pathError) throw pathError;
+    paths = (existing || []).map((rule) => String(rule.path));
+  }
+  if (passwordChanged || updates.status === "disabled") {
+    await db
+      .from("wfilemanager_sessions")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("instance_id", auth.instance.id)
+      .eq("user_id", id)
+      .is("revoked_at", null);
+  }
+  const role = data.role_id ? await roleFor(auth, String(data.role_id)) : null;
+  await audit(request, auth, "user.update", String(data.username), "success", {
+    passwordChanged,
+    status: data.status,
+    allowedPaths: paths,
+  });
+  return json({ user: safeUser(data, role?.name || null, paths) });
 }
 
 async function deleteUser(request: Request, auth: Authenticated, body: Row) {
@@ -259,6 +425,18 @@ async function deleteUser(request: Request, auth: Authenticated, body: Row) {
   if (!target) return json({ error: "User was not found" }, 404);
   if (target.is_admin === true)
     return json({ error: "The installation administrator cannot be deleted" }, 409);
+  await Promise.all([
+    db
+      .from("wfilemanager_sessions")
+      .delete()
+      .eq("instance_id", auth.instance.id)
+      .eq("user_id", id),
+    db
+      .from("wfilemanager_path_rules")
+      .delete()
+      .eq("instance_id", auth.instance.id)
+      .eq("user_id", id),
+  ]);
   const { error } = await db
     .from("wfilemanager_users")
     .delete()
@@ -269,11 +447,7 @@ async function deleteUser(request: Request, auth: Authenticated, body: Row) {
   await audit(request, auth, "user.delete", target.username);
   return json({
     success: true,
-    deleted: {
-      id: target.id,
-      username: target.username,
-      displayName: target.display_name,
-    },
+    deleted: { id: target.id, username: target.username, displayName: target.display_name },
   });
 }
 
@@ -281,13 +455,15 @@ Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   try {
     const action = new URL(request.url).pathname.split("/").filter(Boolean).pop() || "users";
-    if (action === "status") return json({ ok: true, strongPasswords: true, auditLogs: true });
+    if (action === "status")
+      return json({ ok: true, strongPasswords: true, auditLogs: true, pathScopes: true });
     if (action !== "users") return json({ error: "Not found" }, 404);
     const auth = await authenticate(request);
     if (!auth) return json({ error: "Administrator or manage users permission required" }, 403);
     if (request.method === "GET") return listUsers(auth);
     const body = (await request.json().catch(() => ({}))) as Row;
     if (request.method === "POST") return createUser(request, auth, body);
+    if (request.method === "PATCH") return updateUser(request, auth, body);
     if (request.method === "DELETE") return deleteUser(request, auth, body);
     return json({ error: "Method not allowed" }, 405);
   } catch (error) {
