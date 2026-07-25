@@ -1,16 +1,5 @@
-const PROJECT_URL =
-  import.meta.env.VITE_SUPABASE_URL || "https://igihzeyfgwhnuiflamvn.supabase.co";
 const DATABASE_MODE =
   import.meta.env.VITE_WFILEMANAGER_DATABASE_MODE === "sqlite" ? "sqlite" : "supabase";
-const API_URL = `${PROJECT_URL}/functions/v1/wfilemanager-api`;
-const LOGIN_API_URL = `${PROJECT_URL}/functions/v1/wfilemanager-login-api`;
-const ROLES_API_URL = `${PROJECT_URL}/functions/v1/wfilemanager-roles-api`;
-const NOTIFICATIONS_API_URL = `${PROJECT_URL}/functions/v1/wfilemanager-notifications-api`;
-const ACCOUNT_API_URL = `${PROJECT_URL}/functions/v1/wfilemanager-account-api`;
-const USERS_ADMIN_API_URL = `${PROJECT_URL}/functions/v1/wfilemanager-users-admin-api`;
-const PRESENCE_API_URL = `${PROJECT_URL}/functions/v1/wfilemanager-presence-api`;
-const INSTANCE_KEY = import.meta.env.VITE_WFILEMANAGER_INSTANCE_KEY || "kmerhosting-main";
-const TOKEN_KEY = "wfilemanager_session_token";
 
 export type InstanceLifecycleStatus = "active" | "frozen" | "disabled";
 
@@ -97,6 +86,18 @@ export interface WFileManagerSession {
   current: boolean;
 }
 
+export interface AuditLog {
+  id: string;
+  username: string | null;
+  action: string;
+  target: string | null;
+  result: string;
+  metadata: Record<string, unknown>;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+}
+
 export interface SetupPayload {
   instanceName?: string;
   hostname?: string;
@@ -117,110 +118,83 @@ export interface InstanceStatusResponse {
   instance?: WFileManagerInstance;
 }
 
-function token() {
-  return typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
-}
+type GatewayScope = "auth" | "login" | "roles" | "account" | "users" | "presence" | "notifications";
 
-function sqliteUrl(scope: string, action: string) {
+function gatewayUrl(scope: GatewayScope, action: string) {
   const query = new URLSearchParams({ scope, action });
-  return `/api/sqlite?${query}`;
+  return `/api/gateway?${query}`;
 }
 
-async function perform<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const sessionToken = token();
-  const response = await fetch(url, {
+async function perform<T>(scope: GatewayScope, action: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(gatewayUrl(scope, action), {
+    credentials: "same-origin",
+    cache: "no-store",
     ...init,
     headers: {
       "Content-Type": "application/json",
-      "x-wfilemanager-instance": INSTANCE_KEY,
-      ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
       ...(init.headers || {}),
     },
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`);
+  if (!response.ok) {
+    const error = new Error(payload.error || `Request failed (${response.status})`) as Error & { status?: number; retryAfterSeconds?: number };
+    error.status = response.status;
+    if (Number.isFinite(payload.retryAfterSeconds)) error.retryAfterSeconds = Number(payload.retryAfterSeconds);
+    throw error;
+  }
   return payload as T;
 }
 
-function request<T>(action: string, init: RequestInit = {}) {
-  return perform<T>(DATABASE_MODE === "sqlite" ? sqliteUrl("auth", action) : `${API_URL}/${action}`, init);
-}
-
-function loginRequest<T>(init: RequestInit = {}) {
-  return perform<T>(DATABASE_MODE === "sqlite" ? sqliteUrl("auth", "login") : LOGIN_API_URL, init);
-}
-
-function rolesRequest<T>(action: string, init: RequestInit = {}) {
-  return perform<T>(DATABASE_MODE === "sqlite" ? sqliteUrl("roles", action) : `${ROLES_API_URL}/${action}`, init);
-}
-
-function accountRequest<T>(action: string, init: RequestInit = {}) {
-  return perform<T>(DATABASE_MODE === "sqlite" ? sqliteUrl("account", action) : `${ACCOUNT_API_URL}/${action}`, init);
-}
-
-function usersAdminRequest<T>(action: string, init: RequestInit = {}) {
-  return perform<T>(DATABASE_MODE === "sqlite" ? sqliteUrl("auth", action) : `${USERS_ADMIN_API_URL}/${action}`, init);
-}
-
-function presenceRequest<T>(action: string, init: RequestInit = {}) {
-  return perform<T>(DATABASE_MODE === "sqlite" ? sqliteUrl("presence", action) : `${PRESENCE_API_URL}/${action}`, init);
-}
-
-function notificationsRequest<T>(init: RequestInit = {}) {
-  return perform<T>(DATABASE_MODE === "sqlite" ? sqliteUrl("notifications", "notifications") : `${NOTIFICATIONS_API_URL}/notifications`, init);
-}
-
 function signalNotificationsChanged() {
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent("wfilemanager:notifications-changed"));
-  }
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("wfilemanager:notifications-changed"));
 }
 
 export const wfilemanagerApi = {
   databaseMode: DATABASE_MODE,
-  getToken: token,
-  setToken: (value: string) => localStorage.setItem(TOKEN_KEY, value),
-  clearToken: () => localStorage.removeItem(TOKEN_KEY),
-  status: () => request<InstanceStatusResponse>("status"),
-  setup: (data: SetupPayload) => request<{ success: true; user: AuthUser }>("setup", { method: "POST", body: JSON.stringify(data) }),
-  login: (login: string, password: string, remember: boolean) => loginRequest<{ token: string; expiresAt: string; user: AuthUser }>({ method: "POST", body: JSON.stringify({ login, password, remember }) }),
-  me: () => request<{ user: AuthUser; instance: WFileManagerInstance }>("me"),
-  logout: () => request<{ success: true }>("logout", { method: "POST" }),
-  users: () => request<{ users: AuthUser[] }>("users"),
+  getToken: () => null,
+  setToken: (_value: string) => undefined,
+  clearToken: () => undefined,
+  status: () => perform<InstanceStatusResponse>("auth", "status"),
+  setup: (data: SetupPayload) => perform<{ success: true; user: AuthUser }>("auth", "setup", { method: "POST", body: JSON.stringify(data) }),
+  login: (login: string, password: string, remember: boolean) => perform<{ expiresAt: string; user: AuthUser }>("login", "login", { method: "POST", body: JSON.stringify({ login, password, remember }) }),
+  me: () => perform<{ user: AuthUser; instance: WFileManagerInstance }>("auth", "me"),
+  logout: () => perform<{ success: true }>("auth", "logout", { method: "POST", body: "{}" }),
+  users: () => perform<{ users: AuthUser[] }>("auth", "users"),
   createUser: (data: { displayName: string; username: string; email?: string; password: string; roleId?: string; status?: string; mustChangePassword?: boolean }) =>
-    request<{ user: AuthUser }>("users", { method: "POST", body: JSON.stringify(data) }),
-  deleteUser: (id: string) => usersAdminRequest<{ success: true; deleted: { id: string; username: string; displayName: string } }>("users", { method: "DELETE", body: JSON.stringify({ id }) }),
-  accountProfile: () => accountRequest<{ user: AuthUser }>("profile"),
-  updateAccountProfile: (data: { displayName: string; email?: string | null; timezone: string }) => accountRequest<{ user: AuthUser }>("profile", { method: "PATCH", body: JSON.stringify(data) }),
-  changePassword: (currentPassword: string, newPassword: string) => accountRequest<{ success: true }>("password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) }),
-  accountSessions: () => accountRequest<{ sessions: WFileManagerSession[] }>("sessions"),
-  revokeSession: (id: string) => accountRequest<{ success: true; currentRevoked: boolean }>("sessions", { method: "DELETE", body: JSON.stringify({ id }) }),
-  revokeAllSessions: () => accountRequest<{ success: true; currentRevoked: true }>("sessions", { method: "DELETE", body: JSON.stringify({ all: true }) }),
-  rolePermissions: () => rolesRequest<{ roleId: string | null; roleName: string | null; permissions: string[] }>("permissions"),
-  roles: () => rolesRequest<{ roles: WFileManagerRole[] }>("roles"),
+    perform<{ user: AuthUser }>("auth", "users", { method: "POST", body: JSON.stringify(data) }),
+  deleteUser: (id: string) => perform<{ success: true; deleted: { id: string; username: string; displayName: string } }>("users", "users", { method: "DELETE", body: JSON.stringify({ id }) }),
+  accountProfile: () => perform<{ user: AuthUser }>("account", "profile"),
+  updateAccountProfile: (data: { displayName: string; email?: string | null; timezone: string }) => perform<{ user: AuthUser }>("account", "profile", { method: "PATCH", body: JSON.stringify(data) }),
+  changePassword: (currentPassword: string, newPassword: string) => perform<{ success: true }>("account", "password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) }),
+  accountSessions: () => perform<{ sessions: WFileManagerSession[] }>("account", "sessions"),
+  revokeSession: (id: string) => perform<{ success: true; currentRevoked: boolean }>("account", "sessions", { method: "DELETE", body: JSON.stringify({ id }) }),
+  revokeAllSessions: () => perform<{ success: true; currentRevoked: true }>("account", "sessions", { method: "DELETE", body: JSON.stringify({ all: true }) }),
+  rolePermissions: () => perform<{ roleId: string | null; roleName: string | null; permissions: string[] }>("roles", "permissions"),
+  roles: () => perform<{ roles: WFileManagerRole[] }>("roles", "roles"),
   createRole: (data: { name: string; description?: string; permissions: string[] }) =>
-    rolesRequest<{ role: WFileManagerRole }>("roles", { method: "POST", body: JSON.stringify(data) }),
+    perform<{ role: WFileManagerRole }>("roles", "roles", { method: "POST", body: JSON.stringify(data) }),
   updateRole: (data: { id: string; name?: string; description?: string; permissions?: string[] }) =>
-    rolesRequest<{ role: WFileManagerRole }>("roles", { method: "PATCH", body: JSON.stringify(data) }),
-  deleteRole: (id: string) => rolesRequest<{ success: true }>("roles", { method: "DELETE", body: JSON.stringify({ id }) }),
-  notifications: () => notificationsRequest<{ notifications: WFileManagerNotification[] }>(),
+    perform<{ role: WFileManagerRole }>("roles", "roles", { method: "PATCH", body: JSON.stringify(data) }),
+  deleteRole: (id: string) => perform<{ success: true }>("roles", "roles", { method: "DELETE", body: JSON.stringify({ id }) }),
+  auditLogs: () => perform<{ logs: AuditLog[] }>("auth", "logs"),
+  notifications: () => perform<{ notifications: WFileManagerNotification[] }>("notifications", "notifications"),
   createNotification: async (data: { title: string; message?: string; tone?: WFileManagerNotification["tone"]; link?: string; source?: string }) => {
-    const result = await notificationsRequest<{ notification: WFileManagerNotification }>({ method: "POST", body: JSON.stringify(data) });
+    const result = await perform<{ notification: WFileManagerNotification }>("notifications", "notifications", { method: "POST", body: JSON.stringify(data) });
     signalNotificationsChanged();
     return result;
   },
   markNotificationRead: async (id: string, read = true) => {
-    const result = await notificationsRequest<{ success: true }>({ method: "PATCH", body: JSON.stringify({ id, read }) });
+    const result = await perform<{ success: true }>("notifications", "notifications", { method: "PATCH", body: JSON.stringify({ id, read }) });
     signalNotificationsChanged();
     return result;
   },
   markAllNotificationsRead: async () => {
-    const result = await notificationsRequest<{ success: true }>({ method: "PATCH", body: JSON.stringify({ markAll: true }) });
+    const result = await perform<{ success: true }>("notifications", "notifications", { method: "PATCH", body: JSON.stringify({ markAll: true }) });
     signalNotificationsChanged();
     return result;
   },
   deleteNotification: async (id: string) => {
-    const result = await notificationsRequest<{ success: true }>({ method: "DELETE", body: JSON.stringify({ id }) });
+    const result = await perform<{ success: true }>("notifications", "notifications", { method: "DELETE", body: JSON.stringify({ id }) });
     signalNotificationsChanged();
     return result;
   },
