@@ -63,20 +63,26 @@ export function pathRulesForUser(
         .all(roleId) as Array<Record<string, unknown>>)
     : [];
   return [
-    ...userRules.map((rule) => ({
-      id: String(rule.id),
-      path: String(rule.path),
-      accessMode: rule.access_mode === "deny" ? "deny" : "allow",
-      recursive: Boolean(rule.recursive),
-      source: "user" as const,
-    })),
-    ...roleRules.map((rule) => ({
-      id: String(rule.id),
-      path: String(rule.path),
-      accessMode: rule.access_mode === "deny" ? "deny" : "allow",
-      recursive: Boolean(rule.recursive),
-      source: "role" as const,
-    })),
+    ...userRules.map(
+      (rule) =>
+        ({
+          id: String(rule.id),
+          path: String(rule.path),
+          accessMode: rule.access_mode === "deny" ? "deny" : "allow",
+          recursive: Boolean(rule.recursive),
+          source: "user",
+        }) satisfies LocalPathRule,
+    ),
+    ...roleRules.map(
+      (rule) =>
+        ({
+          id: String(rule.id),
+          path: String(rule.path),
+          accessMode: rule.access_mode === "deny" ? "deny" : "allow",
+          recursive: Boolean(rule.recursive),
+          source: "role",
+        }) satisfies LocalPathRule,
+    ),
   ];
 }
 
