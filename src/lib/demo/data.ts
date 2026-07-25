@@ -24,9 +24,9 @@ export interface DemoRole {
   permissions: string[];
 }
 
-export const SERVER_INFO = {
+export const SERVER_INFO: { wfmVersion: string } = {
   wfmVersion: "0.8.10",
-} as const;
+};
 
 export const PERMISSION_KEYS = [
   "browse",
