@@ -16,19 +16,13 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const BUCKET = "wfilemanager-backups";
 const MAGIC = encoder.encode("WFMBAK1");
+const PAGE_SIZE = 500;
 
 function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...cors, "Content-Type": "application/json" },
-  });
+  return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 }
-function hex(bytes: Uint8Array) {
-  return Array.from(bytes).map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-async function digest(bytes: Uint8Array) {
-  return hex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)));
-}
+function hex(bytes: Uint8Array) { return Array.from(bytes).map((byte) => byte.toString(16).padStart(2, "0")).join(""); }
+async function digest(bytes: Uint8Array) { return hex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))); }
 function safeEqual(left: string, right: string) {
   if (!left || left.length !== right.length) return false;
   let difference = 0;
@@ -72,17 +66,30 @@ async function authorize(request: Request) {
   if (!safeEqual(supplied, await configHash())) return null;
   return secret;
 }
+function backupKey(automationSecret: string) {
+  const configured = String(Deno.env.get("WFILEMANAGER_BACKUP_ENCRYPTION_KEY") || "").trim();
+  return {
+    secret: configured || automationSecret,
+    version: configured ? String(Deno.env.get("WFILEMANAGER_BACKUP_KEY_VERSION") || "v1") : "legacy-automation-secret",
+    dedicated: Boolean(configured),
+  };
+}
 function policy(now = new Date()) {
   if (now.getUTCDate() === 1) return { snapshotType: "monthly", retentionDays: 190 };
   if (now.getUTCDay() === 0) return { snapshotType: "weekly", retentionDays: 35 };
   return { snapshotType: "automatic", retentionDays: 8 };
 }
 async function rows(table: string, instanceId: string) {
-  const { data, error } = await db.from(table).select("*").eq("instance_id", instanceId);
-  if (error) throw error;
-  return data || [];
+  const result: unknown[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await db.from(table).select("*").eq("instance_id", instanceId).range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    result.push(...(data || []));
+    if (!data || data.length < PAGE_SIZE) break;
+  }
+  return result;
 }
-async function createSnapshot(secret: string, instance: Record<string, unknown>) {
+async function createSnapshot(encryptionSecret: string, keyVersion: string, instance: Record<string, unknown>) {
   const now = new Date();
   const selectedPolicy = policy(now);
   const [roles, users, settings, notifications, pathRules, auditLogs] = await Promise.all([
@@ -108,17 +115,13 @@ async function createSnapshot(secret: string, instance: Record<string, unknown>)
     },
     data: { roles, users, settings, notifications, pathRules, auditLogs },
   };
-  const encrypted = await encrypt(secret, document);
+  const encrypted = await encrypt(encryptionSecret, document);
   const checksum = await digest(encrypted);
   const safeKey = String(instance.instance_key).replace(/[^A-Za-z0-9._-]/g, "_");
   const stamp = now.toISOString().replace(/[:.]/g, "-");
   const storagePath = `instances/${safeKey}/${now.toISOString().slice(0, 10)}/${stamp}.wfmbackup`;
   const retentionUntil = new Date(now.getTime() + selectedPolicy.retentionDays * 86400000).toISOString();
-  const upload = await db.storage.from(BUCKET).upload(storagePath, encrypted, {
-    contentType: "application/octet-stream",
-    cacheControl: "3600",
-    upsert: false,
-  });
+  const upload = await db.storage.from(BUCKET).upload(storagePath, encrypted, { contentType: "application/octet-stream", cacheControl: "3600", upsert: false });
   if (upload.error) throw upload.error;
   const { data: snapshot, error } = await db.from("wfilemanager_backup_snapshots").insert({
     instance_id: instance.id,
@@ -132,14 +135,8 @@ async function createSnapshot(secret: string, instance: Record<string, unknown>)
       format: document.format,
       encrypted: true,
       cipher: "AES-256-GCM",
-      counts: {
-        roles: roles.length,
-        users: users.length,
-        settings: settings.length,
-        notifications: notifications.length,
-        pathRules: pathRules.length,
-        auditLogs: auditLogs.length,
-      },
+      keyVersion,
+      counts: { roles: roles.length, users: users.length, settings: settings.length, notifications: notifications.length, pathRules: pathRules.length, auditLogs: auditLogs.length },
     },
   }).select("id").single();
   if (error) {
@@ -151,58 +148,87 @@ async function createSnapshot(secret: string, instance: Record<string, unknown>)
     if (downloaded.error) throw downloaded.error;
     const verificationBytes = new Uint8Array(await downloaded.data.arrayBuffer());
     if (!safeEqual(checksum, await digest(verificationBytes))) throw new Error("Backup checksum mismatch");
-    const verifiedDocument = await decrypt(secret, verificationBytes);
-    if (verifiedDocument?.format !== document.format || verifiedDocument?.instance?.id !== instance.id) {
-      throw new Error("Backup content verification failed");
-    }
-    await db.from("wfilemanager_backup_snapshots").update({
-      verified_at: new Date().toISOString(), verification_error: null,
-    }).eq("id", snapshot.id);
+    const verifiedDocument = await decrypt(encryptionSecret, verificationBytes);
+    if (verifiedDocument?.format !== document.format || verifiedDocument?.instance?.id !== instance.id) throw new Error("Backup content verification failed");
+    await db.from("wfilemanager_backup_snapshots").update({ verified_at: new Date().toISOString(), verification_error: null }).eq("id", snapshot.id);
   } catch (verificationError) {
-    await db.from("wfilemanager_backup_snapshots").update({
-      status: "failed",
-      verification_error: verificationError instanceof Error ? verificationError.message : "Verification failed",
-    }).eq("id", snapshot.id);
+    await db.from("wfilemanager_backup_snapshots").update({ status: "failed", verification_error: verificationError instanceof Error ? verificationError.message : "Verification failed" }).eq("id", snapshot.id);
     throw verificationError;
   }
-  return { snapshotId: snapshot.id, storagePath, sizeBytes: encrypted.byteLength, checksum, retentionUntil };
+  return { snapshotId: snapshot.id, storagePath, sizeBytes: encrypted.byteLength, checksum, retentionUntil, keyVersion };
 }
-async function runSnapshots(secret: string) {
-  const { data: instances, error } = await db.from("wfilemanager_instances").select("*")
-    .eq("service_plan", "pro").in("data_status", ["active","frozen","suspended"]).limit(100);
-  if (error) throw error;
+async function runSnapshots(encryptionSecret: string, keyVersion: string) {
   const results: unknown[] = [];
-  for (const instance of instances || []) {
-    const { data: latest } = await db.from("wfilemanager_backup_snapshots")
-      .select("created_at,status").eq("instance_id", instance.id)
-      .order("created_at", { ascending: false }).limit(1).maybeSingle();
-    if (latest && new Date(latest.created_at).getTime() > Date.now() - 20 * 3600000) {
-      results.push({ instance: instance.instance_key, skipped: "recent_snapshot" });
-      continue;
+  let checked = 0;
+  for (let from = 0; ; from += 100) {
+    const { data: instances, error } = await db.from("wfilemanager_instances").select("*")
+      .eq("service_plan", "pro").in("data_status", ["active", "frozen", "suspended"])
+      .order("id", { ascending: true }).range(from, from + 99);
+    if (error) throw error;
+    for (const instance of instances || []) {
+      checked += 1;
+      const { data: latest } = await db.from("wfilemanager_backup_snapshots")
+        .select("created_at,status").eq("instance_id", instance.id)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (latest && new Date(latest.created_at).getTime() > Date.now() - 20 * 3600000) {
+        results.push({ instance: instance.instance_key, skipped: "recent_snapshot" });
+        continue;
+      }
+      try { results.push({ instance: instance.instance_key, snapshot: await createSnapshot(encryptionSecret, keyVersion, instance) }); }
+      catch (value) { results.push({ instance: instance.instance_key, error: value instanceof Error ? value.message : "Snapshot failed" }); }
     }
-    try {
-      results.push({ instance: instance.instance_key, snapshot: await createSnapshot(secret, instance) });
-    } catch (value) {
-      results.push({ instance: instance.instance_key, error: value instanceof Error ? value.message : "Snapshot failed" });
-    }
+    if (!instances || instances.length < 100) break;
   }
-  return { checked: instances?.length || 0, results };
+  return { checked, results };
 }
 async function cleanupExpired() {
-  const { data: snapshots, error } = await db.from("wfilemanager_backup_snapshots")
-    .select("id,storage_path").lt("retention_until", new Date().toISOString()).limit(500);
-  if (error) throw error;
-  const paths = (snapshots || []).map((snapshot) => snapshot.storage_path).filter(Boolean);
-  if (paths.length) {
-    const removal = await db.storage.from(BUCKET).remove(paths);
-    if (removal.error) throw removal.error;
-  }
-  const ids = (snapshots || []).map((snapshot) => snapshot.id);
-  if (ids.length) {
+  let deleted = 0;
+  while (true) {
+    const { data: snapshots, error } = await db.from("wfilemanager_backup_snapshots")
+      .select("id,storage_path").lt("retention_until", new Date().toISOString()).limit(500);
+    if (error) throw error;
+    if (!snapshots?.length) break;
+    const paths = snapshots.map((snapshot) => snapshot.storage_path).filter(Boolean);
+    if (paths.length) {
+      const removal = await db.storage.from(BUCKET).remove(paths);
+      if (removal.error) throw removal.error;
+    }
+    const ids = snapshots.map((snapshot) => snapshot.id);
     const deletion = await db.from("wfilemanager_backup_snapshots").delete().in("id", ids);
     if (deletion.error) throw deletion.error;
+    deleted += ids.length;
+    if (snapshots.length < 500) break;
   }
-  return { deleted: ids.length };
+  return { deleted };
+}
+async function restoreSnapshot(encryptionSecret: string, body: Record<string, unknown>) {
+  const snapshotId = String(body.snapshotId || "").trim();
+  const dryRun = body.dryRun !== false;
+  if (!snapshotId) throw new Error("snapshotId is required");
+  const { data: snapshot, error } = await db.from("wfilemanager_backup_snapshots")
+    .select("id,instance_id,status,storage_path,checksum_sha256,manifest,wfilemanager_instances(instance_key)")
+    .eq("id", snapshotId).maybeSingle();
+  if (error) throw error;
+  if (!snapshot || snapshot.status !== "available" || !snapshot.storage_path) throw new Error("Snapshot is unavailable");
+  const downloaded = await db.storage.from(BUCKET).download(snapshot.storage_path);
+  if (downloaded.error) throw downloaded.error;
+  const bytes = new Uint8Array(await downloaded.data.arrayBuffer());
+  if (!safeEqual(String(snapshot.checksum_sha256 || ""), await digest(bytes))) throw new Error("Backup checksum mismatch");
+  const document = await decrypt(encryptionSecret, bytes);
+  if (String(document?.instance?.id || "") !== String(snapshot.instance_id)) throw new Error("Snapshot instance mismatch");
+  const instanceKey = String((snapshot.wfilemanager_instances as any)?.instance_key || "");
+  if (!dryRun && String(body.confirmInstanceKey || "") !== instanceKey) throw new Error("confirmInstanceKey must exactly match the target instance key");
+  const { data: result, error: restoreError } = await db.rpc("wfilemanager_restore_managed_snapshot", {
+    p_instance_id: snapshot.instance_id,
+    p_document: document,
+    p_dry_run: dryRun,
+  });
+  if (restoreError) {
+    await db.from("wfilemanager_backup_snapshots").update({ restore_error: restoreError.message }).eq("id", snapshot.id);
+    throw restoreError;
+  }
+  if (!dryRun) await db.from("wfilemanager_backup_snapshots").update({ restored_at: new Date().toISOString(), restore_error: null }).eq("id", snapshot.id);
+  return { snapshotId, instanceKey, ...result };
 }
 
 Deno.serve(async (request: Request) => {
@@ -214,18 +240,17 @@ Deno.serve(async (request: Request) => {
       encryptedSnapshots: true,
       cipher: "AES-256-GCM",
       checksumVerification: true,
-      restoreValidation: true,
+      transactionalRestore: true,
+      dedicatedEncryptionKeyConfigured: Boolean(Deno.env.get("WFILEMANAGER_BACKUP_ENCRYPTION_KEY")),
       retention: { dailyDays: 8, weeklyDays: 35, monthlyDays: 190 },
     });
     if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
-    const secret = await authorize(request);
-    if (!secret) return json({ error: "Unauthorized backup request" }, 401);
-    if (action === "run" || action === "snapshot") return json({
-      ok: true,
-      snapshots: await runSnapshots(secret),
-      cleanup: await cleanupExpired(),
-    });
+    const automationSecret = await authorize(request);
+    if (!automationSecret) return json({ error: "Unauthorized backup request" }, 401);
+    const key = backupKey(automationSecret);
+    if (action === "run" || action === "snapshot") return json({ ok: true, snapshots: await runSnapshots(key.secret, key.version), cleanup: await cleanupExpired(), dedicatedEncryptionKey: key.dedicated });
     if (action === "cleanup") return json({ ok: true, cleanup: await cleanupExpired() });
+    if (action === "restore") return json({ ok: true, restore: await restoreSnapshot(key.secret, await request.json().catch(() => ({}))) });
     return json({ error: "Not found" }, 404);
   } catch (error) {
     console.error(error);
