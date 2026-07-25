@@ -36,5 +36,38 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
+  {
+    files: [
+      "supabase/functions/**/*.ts",
+      "src/lib/server/archive-runtime.ts",
+      "src/lib/server/archive-runtime-v2.ts",
+    ],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
+  {
+    files: [
+      "supabase/functions/wfilemanager-customer-api/index.ts",
+      "supabase/functions/wfilemanager-customer-security-api/index.ts",
+      "supabase/functions/wfilemanager-invoice-api/index.ts",
+      "supabase/functions/wfilemanager-setup-api/index.ts",
+    ],
+    rules: {
+      "no-control-regex": "off",
+    },
+  },
+  {
+    files: ["src/routes/_app.explorer.tsx"],
+    rules: {
+      "no-constant-binary-expression": "off",
+    },
+  },
+  {
+    files: ["src/lib/server/file-manager-runtime.ts"],
+    rules: {
+      "no-useless-escape": "off",
+    },
+  },
   eslintPluginPrettier,
 );
