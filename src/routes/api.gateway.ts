@@ -103,7 +103,8 @@ function upstreamFor(request: Request, scope: Scope, action: string) {
   }
   if (scope === "login") return new URL(endpoints.login);
   if (scope === "setup") return new URL(endpoints.setup);
-  const base = scope === "users" ? endpoints.users : endpoints[scope];
+  const userAdministration = scope === "users" || (scope === "auth" && action === "users");
+  const base = userAdministration ? endpoints.users : endpoints[scope];
   return new URL(`${base}/${action}`);
 }
 
