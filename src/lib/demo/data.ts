@@ -25,7 +25,7 @@ export interface DemoRole {
 }
 
 export const SERVER_INFO: { wfmVersion: string } = {
-  wfmVersion: "0.8.10",
+  wfmVersion: "0.8.11",
 };
 
 export const PERMISSION_KEYS = [
