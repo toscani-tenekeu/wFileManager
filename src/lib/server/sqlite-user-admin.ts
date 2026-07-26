@@ -3,7 +3,7 @@ import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { SqliteAuthError, listUsers, passwordPolicyError } from "@/lib/server/sqlite-store";
 import { normalizeAllowedPaths, pathRulesForUser } from "@/lib/server/sqlite-path-policy";
 
-type Actor = Record<string, any>;
+type Actor = Parameters<typeof listUsers>[0];
 const DB_PATH = process.env.WFILEMANAGER_SQLITE_PATH || "/var/lib/wfilemanager/wfilemanager.db";
 let database: DatabaseSync | null = null;
 
@@ -77,7 +77,7 @@ function replaceRules(connection: DatabaseSync, userId: string, pathsInput: unkn
 
 export function createSqliteUserWithPaths(
   actor: Actor,
-  create: (actor: any, data: Record<string, unknown>) => { user: { id: string } },
+  create: (actor: Actor, data: Record<string, unknown>) => { user: { id: string } },
   payload: Record<string, unknown>,
 ) {
   const roleId = clean(payload.roleId) || null;
@@ -98,7 +98,7 @@ export function createSqliteUserWithPaths(
 }
 
 export function updateSqliteUser(actor: Actor, payload: Record<string, unknown>) {
-  listUsers(actor as never);
+  listUsers(actor);
   const id = clean(payload.id);
   if (!id) throw new SqliteAuthError(400, "User id is required.");
   if (id === String(actor.id))
@@ -107,7 +107,7 @@ export function updateSqliteUser(actor: Actor, payload: Record<string, unknown>)
     | Record<string, unknown>
     | undefined;
   if (!current) throw new SqliteAuthError(404, "User was not found.");
-  if (Boolean(current.is_admin))
+  if (current.is_admin)
     throw new SqliteAuthError(409, "The installation administrator cannot be modified.");
 
   const updates: string[] = [];
