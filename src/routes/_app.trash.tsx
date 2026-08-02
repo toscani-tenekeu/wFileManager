@@ -8,7 +8,6 @@ import {
   RotateCcw,
   Search,
   Trash2,
-  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +26,14 @@ import { formatBytes, formatRelative } from "@/lib/format";
 import { localApi, type TrashItem } from "@/lib/local-api";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export const Route = createFileRoute("/_app/trash")({
   head: () => ({ meta: [{ title: "Trash — wFileManager" }] }),
@@ -111,9 +118,9 @@ function Trash() {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-border bg-surface/60 px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col p-6">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+        <div className="contents">
           <div>
             <h1 className="text-lg font-semibold tracking-tight">Trash</h1>
             <p className="text-xs text-muted-foreground">
@@ -122,7 +129,7 @@ function Trash() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-56">
+            <div className="relative w-full min-w-0 sm:w-64">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={q}
@@ -132,13 +139,14 @@ function Trash() {
               />
             </div>
             <Button
-              variant="outline"
-              size="sm"
+              variant="ghost"
+              size="icon"
               onClick={() => void load()}
               disabled={loading || Boolean(busyId)}
+              aria-label="Refresh trash"
+              title="Refresh trash"
             >
-              <RefreshCw className={cn("mr-1.5 h-4 w-4", loading && "animate-spin")} />
-              Refresh
+              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
             </Button>
             <Button
               variant="destructive"
@@ -153,7 +161,7 @@ function Trash() {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto p-4">
+      <div className="min-h-0 flex-1 overflow-auto">
         {loading ? (
           <div className="grid h-56 place-items-center text-sm text-muted-foreground">
             <div className="text-center">
@@ -162,11 +170,9 @@ function Trash() {
             </div>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="grid h-64 place-items-center rounded-xl border border-dashed border-border bg-muted/10 text-center">
+          <div className="grid h-64 place-items-center rounded-md border border-dashed border-border bg-muted/10 text-center">
             <div>
-              <div className="mx-auto mb-3 grid h-16 w-16 place-items-center rounded-2xl border border-border bg-surface shadow-sm">
-                <Trash2 className="h-8 w-8 text-muted-foreground" />
-              </div>
+              <Trash2 className="mx-auto mb-3 h-7 w-7 text-muted-foreground" />
               <p className="font-medium">{items.length ? "No matching items" : "Trash is empty"}</p>
               <p className="mt-1 text-sm text-muted-foreground">
                 Deleted files and folders will appear here.
@@ -174,83 +180,99 @@ function Trash() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3">
-            {filtered.map((item) => {
-              const Icon = item.kind === "directory" ? Folder : FileIcon;
-              const busy = busyId === item.id;
-              return (
-                <article
-                  key={item.id}
-                  className="group relative flex min-h-56 flex-col overflow-hidden rounded-xl border border-border bg-card p-4 transition duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:bg-muted/25 hover:shadow-lg hover:shadow-black/10"
-                >
-                  <div className="mb-3 flex items-start justify-between gap-2">
-                    <Badge variant="outline" className="font-normal">
-                      {item.kind === "directory" ? "Folder" : "File"}
-                    </Badge>
-                    <span className="text-[11px] text-muted-foreground">
-                      {formatRelative(item.deletedAt)}
-                    </span>
-                  </div>
-                  <div className="flex flex-1 flex-col items-center justify-center text-center">
-                    <div
-                      className={cn(
-                        "mb-3 grid h-20 w-20 place-items-center rounded-2xl border shadow-inner",
-                        item.kind === "directory"
-                          ? "border-primary/20 bg-primary/10"
-                          : "border-border bg-muted/40",
-                      )}
-                    >
-                      <Icon
-                        className={cn(
-                          "h-12 w-12",
-                          item.kind === "directory"
-                            ? "fill-primary/15 text-primary"
-                            : "text-muted-foreground",
-                        )}
-                      />
-                    </div>
-                    <h2 className="w-full truncate text-sm font-semibold" title={item.name}>
-                      {item.name}
-                    </h2>
-                    <p
-                      className="mt-1 line-clamp-2 break-all font-mono text-[11px] text-muted-foreground"
-                      title={item.originalPath}
-                    >
-                      {item.originalPath}
-                    </p>
-                  </div>
-                  <div className="mt-4 flex items-center justify-between border-t border-border/70 pt-3">
-                    <span className="text-xs text-muted-foreground">{formatBytes(item.size)}</span>
-                    <div className="flex gap-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8"
-                        disabled={busy || Boolean(busyId && !busy)}
-                        onClick={() => void restore(item)}
+          <div className="overflow-hidden rounded-md border border-border bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Original path</TableHead>
+                  <TableHead>Size</TableHead>
+                  <TableHead>Deleted</TableHead>
+                  <TableHead className="w-24 text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((item) => {
+                  const Icon = item.kind === "directory" ? Folder : FileIcon;
+                  const busy = busyId === item.id;
+                  return (
+                    <TableRow key={item.id}>
+                      <TableCell>
+                        <div className="flex min-w-48 items-center gap-2">
+                          <div
+                            className={cn(
+                              "grid h-8 w-8 shrink-0 place-items-center rounded-md border",
+                              item.kind === "directory"
+                                ? "border-primary/20 bg-primary/10"
+                                : "border-border bg-muted/40",
+                            )}
+                          >
+                            <Icon
+                              className={cn(
+                                "h-4 w-4",
+                                item.kind === "directory"
+                                  ? "fill-primary/15 text-primary"
+                                  : "text-muted-foreground",
+                              )}
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium" title={item.name}>
+                              {item.name}
+                            </div>
+                            <Badge variant="outline" className="mt-1 font-normal">
+                              {item.kind === "directory" ? "Folder" : "File"}
+                            </Badge>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell
+                        className="max-w-[24rem] truncate font-mono text-xs text-muted-foreground"
+                        title={item.originalPath}
                       >
-                        {busy ? (
-                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                        )}
-                        Restore
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        disabled={Boolean(busyId)}
-                        onClick={() => setDeleteItem(item)}
-                        aria-label={`Permanently delete ${item.name}`}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
+                        {item.originalPath}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                        {formatBytes(item.size)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                        {formatRelative(item.deletedAt)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            disabled={busy || Boolean(busyId && !busy)}
+                            onClick={() => void restore(item)}
+                            aria-label={`Restore ${item.name}`}
+                            title={`Restore ${item.name}`}
+                          >
+                            {busy ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <RotateCcw className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            disabled={Boolean(busyId)}
+                            onClick={() => setDeleteItem(item)}
+                            aria-label={`Permanently delete ${item.name}`}
+                            title={`Permanently delete ${item.name}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           </div>
         )}
       </div>
