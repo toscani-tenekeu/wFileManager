@@ -2,34 +2,12 @@ import { readFile } from "node:fs/promises";
 import { createFileRoute } from "@tanstack/react-router";
 import type {} from "@tanstack/react-start";
 
-const PROJECT_URL = (
-  process.env.WFILEMANAGER_SUPABASE_URL ||
-  process.env.VITE_SUPABASE_URL ||
-  "https://igihzeyfgwhnuiflamvn.supabase.co"
-).replace(/\/$/, "");
-const DATABASE_MODE = process.env.WFILEMANAGER_DATABASE_MODE === "sqlite" ? "sqlite" : "supabase";
-const INSTANCE_KEY =
-  process.env.WFILEMANAGER_INSTANCE_KEY ||
-  process.env.VITE_WFILEMANAGER_INSTANCE_KEY ||
-  "kmerhosting-main";
 const COOKIE_NAME = "wfm_session";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_JSON_BODY_BYTES = Math.max(
   16 * 1024,
   Number(process.env.WFILEMANAGER_GATEWAY_MAX_BODY_BYTES || 1024 * 1024),
 );
-
-const endpoints = {
-  auth: `${PROJECT_URL}/functions/v1/wfilemanager-api`,
-  login: `${PROJECT_URL}/functions/v1/wfilemanager-login-api`,
-  setup: `${PROJECT_URL}/functions/v1/wfilemanager-setup-api`,
-  roles: `${PROJECT_URL}/functions/v1/wfilemanager-roles-api`,
-  account: `${PROJECT_URL}/functions/v1/wfilemanager-account-api`,
-  users: `${PROJECT_URL}/functions/v1/wfilemanager-users-admin-api`,
-  presence: `${PROJECT_URL}/functions/v1/wfilemanager-presence-api`,
-  notifications: `${PROJECT_URL}/functions/v1/wfilemanager-notifications-api`,
-  backup: `${PROJECT_URL}/functions/v1/wfilemanager-backup-client-api`,
-} as const;
 
 type Scope = keyof typeof allowedActions;
 
@@ -42,7 +20,6 @@ const allowedActions = {
   users: new Set(["users"]),
   presence: new Set(["presence"]),
   notifications: new Set(["notifications"]),
-  backup: new Set(["status", "sources", "jobs", "cancel", "transfer-url"]),
 } as const;
 
 function json(body: unknown, status = 200, headers?: HeadersInit) {
@@ -103,18 +80,13 @@ function validScope(value: string): value is Scope {
 }
 
 function upstreamFor(request: Request, scope: Scope, action: string) {
-  if (DATABASE_MODE === "sqlite") {
-    const url = new URL("/api/sqlite", request.url);
-    url.searchParams.set(
-      "scope",
-      scope === "login" || scope === "setup" ? "auth" : scope === "users" ? "auth" : scope,
-    );
-    url.searchParams.set("action", action);
-    return url;
-  }
-  if (scope === "login") return new URL(endpoints.login);
-  if (scope === "setup") return new URL(endpoints.setup);
-  return new URL(`${endpoints[scope]}/${action}`);
+  const url = new URL("/api/sqlite", request.url);
+  url.searchParams.set(
+    "scope",
+    scope === "login" || scope === "setup" ? "auth" : scope === "users" ? "auth" : scope,
+  );
+  url.searchParams.set("action", action);
+  return url;
 }
 
 async function sqliteSetupSecret() {
@@ -135,28 +107,7 @@ async function requestBody(request: Request, scope: Scope) {
 
   const text = new TextDecoder().decode(bytes);
   const payload = (JSON.parse(text || "{}") || {}) as Record<string, unknown>;
-  if (DATABASE_MODE === "sqlite") {
-    return JSON.stringify({ ...payload, setupSecret: await sqliteSetupSecret() });
-  }
-  const publicUrl =
-    process.env.WFILEMANAGER_PUBLIC_BASE_URL ||
-    `${secureRequest(request) ? "https" : "http"}://${request.headers.get("host") || new URL(request.url).host}`;
-  return JSON.stringify({
-    ...payload,
-    rootResetTokenHash:
-      process.env.WFILEMANAGER_ROOT_RESET_TOKEN_HASH ||
-      process.env.VITE_WFILEMANAGER_ROOT_RESET_TOKEN_HASH ||
-      "",
-    instanceSecretHash:
-      process.env.WFILEMANAGER_INSTANCE_SECRET_HASH ||
-      process.env.VITE_WFILEMANAGER_INSTANCE_SECRET_HASH ||
-      "",
-    hostname:
-      process.env.WFILEMANAGER_DOMAIN ||
-      request.headers.get("host")?.split(":")[0] ||
-      new URL(request.url).hostname,
-    baseUrl: publicUrl.replace(/\/$/, ""),
-  });
+  return JSON.stringify({ ...payload, setupSecret: await sqliteSetupSecret() });
 }
 
 async function proxy(request: Request) {
@@ -174,10 +125,7 @@ async function proxy(request: Request) {
       if (key !== "scope" && key !== "action") upstreamUrl.searchParams.append(key, value);
     }
 
-    const headers = new Headers({
-      Accept: "application/json",
-      "x-wfilemanager-instance": INSTANCE_KEY,
-    });
+    const headers = new Headers({ Accept: "application/json" });
     const sessionToken = cookieValue(request, COOKIE_NAME);
     if (sessionToken) headers.set("Authorization", `Bearer ${sessionToken}`);
     if (!["GET", "HEAD"].includes(request.method)) headers.set("Content-Type", "application/json");

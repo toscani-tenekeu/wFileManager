@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
-  ArchiveRestore,
   ListTodo,
   FolderTree,
   UploadCloud,
@@ -19,7 +18,6 @@ import {
   ScrollText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 import { SERVER_INFO } from "@/lib/demo/data";
 import { useAuth } from "@/lib/auth";
 import { localApi } from "@/lib/local-api";
@@ -35,11 +33,6 @@ type Item = {
   newTab?: boolean;
 };
 
-const DATA_BACKEND = String(
-  import.meta.env.VITE_WFILEMANAGER_DATABASE_MODE || "sqlite",
-).toLowerCase();
-const IS_PRO = DATA_BACKEND === "supabase";
-
 const NAV: { label: string; items: Item[] }[] = [
   {
     label: "Workspace",
@@ -48,7 +41,6 @@ const NAV: { label: string; items: Item[] }[] = [
       { to: "/explorer", label: "File Explorer", icon: FolderTree, permission: "browse" },
       { to: "/uploads", label: "Uploads", icon: UploadCloud, permission: "upload" },
       { to: "/tasks", label: "Background tasks", icon: ListTodo },
-      { to: "/backups", label: "Remote backups", icon: ArchiveRestore, adminOnly: true },
       {
         to: "/trash",
         label: "Trash",
@@ -133,12 +125,7 @@ export function AppSidebar({ className }: { className?: string }) {
     >
       <div className="flex h-14 items-center gap-2 border-b border-sidebar-border px-4">
         <div className="flex flex-col leading-tight">
-          <div className="flex items-center gap-1.5">
-            {IS_PRO && (
-              <Badge className="h-5 px-1.5 text-[10px] font-semibold tracking-widest">PRO</Badge>
-            )}
-            <span className="text-sm font-semibold tracking-tight">wFileManager</span>
-          </div>
+          <span className="text-sm font-semibold tracking-tight">wFileManager</span>
           <span className="text-[10px] tracking-wide text-muted-foreground">
             From KmerHosting LLC
           </span>

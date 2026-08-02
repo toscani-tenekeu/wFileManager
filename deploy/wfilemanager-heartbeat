@@ -18,6 +18,8 @@ SUPABASE_URL="${WFILEMANAGER_SUPABASE_URL:-${VITE_SUPABASE_URL:-}}"
 LIFECYCLE_URL="${WFILEMANAGER_LIFECYCLE_API_URL:-${SUPABASE_URL%/}/functions/v1/wfilemanager-instance-lifecycle-api}"
 HOSTNAME_VALUE="$(hostname -f 2>/dev/null || hostname)"
 BASE_URL="${WFILEMANAGER_PUBLIC_BASE_URL:-}"
+APP_VERSION="$(node -p "require('/opt/wfilemanager/current/package.json').version" 2>/dev/null || true)"
+CAPABILITY="pro-decommission-v1"
 
 [[ -n "$INSTANCE_KEY" && "$LIFECYCLE_URL" == https://* ]] || {
   echo "wFileManager heartbeat deferred: lifecycle configuration is incomplete." >&2
@@ -37,7 +39,12 @@ else
   exit 0
 fi
 
-BODY="$(jq -cn --arg hostname "$HOSTNAME_VALUE" --arg baseUrl "$BASE_URL" '{hostname:$hostname,baseUrl:$baseUrl}')"
+BODY="$(jq -cn \
+  --arg hostname "$HOSTNAME_VALUE" \
+  --arg baseUrl "$BASE_URL" \
+  --arg appVersion "$APP_VERSION" \
+  --arg capability "$CAPABILITY" \
+  '{hostname:$hostname,baseUrl:$baseUrl,appVersion:$appVersion,capabilities:[$capability]}')"
 RESPONSE_FILE="$(mktemp)"
 trap 'rm -f "$RESPONSE_FILE"' EXIT
 
@@ -62,6 +69,20 @@ if [[ "$HTTP_STATUS" != "200" ]]; then
       exit 0
       ;;
   esac
+fi
+
+if jq -e '.success == true and .action == "retire-pro"' "$RESPONSE_FILE" >/dev/null; then
+  ACTION_AUTHORIZATION="$(jq -r '.actionAuthorization // empty' "$RESPONSE_FILE")"
+  if [[ ! "$ACTION_AUTHORIZATION" =~ ^[a-f0-9]{64}$ ]]; then
+    echo "wFileManager Pro retirement deferred: invalid action authorization." >&2
+    exit 0
+  fi
+  echo "Authenticated wFileManager Pro retirement request received."
+  /usr/local/sbin/wfilemanager-uninstall \
+    --retire-pro \
+    --app-version "$APP_VERSION" \
+    --authorization "$ACTION_AUTHORIZATION"
+  exit $?
 fi
 
 if jq -e '.success == true and .status == "active"' "$RESPONSE_FILE" >/dev/null; then

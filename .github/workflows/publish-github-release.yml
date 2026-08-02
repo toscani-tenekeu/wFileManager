@@ -26,174 +26,82 @@ jobs:
       RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.event.workflow_run.head_sha }}
 
     steps:
-      - name: Check out the validated source
+      - name: Check out validated source
         uses: actions/checkout@v4
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
 
-      - name: Validate stable release metadata
-        id: metadata
+      - name: Resolve version
+        id: version
         shell: bash
         run: |
           set -Eeuo pipefail
+          VERSION="$(jq -r '.version // empty' package.json)"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
-          VERSION="$(jq -r '.version // empty' release/stable.json)"
-          PACKAGE_VERSION="$(jq -r '.version // empty' package.json)"
-          RELEASE_URL="$(jq -r '.releaseUrl // .url // empty' release/stable.json)"
-          EXPECTED_SHA256="$(jq -r '.sha256 // empty' release/stable.json | tr '[:upper:]' '[:lower:]')"
-          EXPECTED_SIZE="$(jq -r '.size // 0' release/stable.json)"
-          TAG="v${VERSION}"
-
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] || {
-            echo "Invalid stable version: $VERSION" >&2
-            exit 1
-          }
-          [[ "$PACKAGE_VERSION" == "$VERSION" ]] || {
-            echo "package.json is $PACKAGE_VERSION but stable.json is $VERSION" >&2
-            exit 1
-          }
-          [[ "$RELEASE_URL" == https://* ]] || {
-            echo "The release archive URL must use HTTPS" >&2
-            exit 1
-          }
-          [[ "$EXPECTED_SHA256" =~ ^[a-f0-9]{64}$ ]] || {
-            echo "The release manifest contains an invalid SHA-256 checksum" >&2
-            exit 1
-          }
-          [[ "$EXPECTED_SIZE" =~ ^[0-9]+$ && "$EXPECTED_SIZE" -gt 0 ]] || {
-            echo "The release manifest contains an invalid archive size" >&2
-            exit 1
-          }
-
-          ARCHIVE_NAME="$(basename "${RELEASE_URL%%\?*}")"
-          [[ "$ARCHIVE_NAME" == "wfilemanager-${VERSION}.tar.gz" ]] || {
-            echo "Unexpected archive name: $ARCHIVE_NAME" >&2
-            exit 1
-          }
-          grep -Fq "$EXPECTED_SHA256  $ARCHIVE_NAME" release/SHA256SUMS || {
-            echo "release/SHA256SUMS is not synchronized with stable.json" >&2
-            exit 1
-          }
-
-          {
-            echo "version=$VERSION"
-            echo "tag=$TAG"
-            echo "release_url=$RELEASE_URL"
-            echo "archive_name=$ARCHIVE_NAME"
-            echo "sha256=$EXPECTED_SHA256"
-            echo "size=$EXPECTED_SIZE"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Stop when the GitHub release already exists
+      - name: Check existing release
         id: existing
         shell: bash
         env:
-          TAG: ${{ steps.metadata.outputs.tag }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
-          set -Eeuo pipefail
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "GitHub release $TAG already exists."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Download and verify the stable archive
+      - name: Build the canonical archive
+        if: steps.existing.outputs.exists != 'true'
+        id: archive
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -Eeuo pipefail
+          ARCHIVE="wfilemanager-$VERSION.tar.gz"
+          git archive --format=tar.gz --prefix="wFileManager-$VERSION/" -o "$ARCHIVE" "$RELEASE_REF"
+          SHA256="$(sha256sum "$ARCHIVE" | awk '{print $1}')"
+          SIZE="$(stat -c%s "$ARCHIVE")"
+          printf '%s  %s\n' "$SHA256" "$ARCHIVE" > SHA256SUMS
+          echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release notes
         if: steps.existing.outputs.exists != 'true'
         shell: bash
         env:
-          RELEASE_URL: ${{ steps.metadata.outputs.release_url }}
-          ARCHIVE_NAME: ${{ steps.metadata.outputs.archive_name }}
-          EXPECTED_SHA256: ${{ steps.metadata.outputs.sha256 }}
-          EXPECTED_SIZE: ${{ steps.metadata.outputs.size }}
-          VERSION: ${{ steps.metadata.outputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA256: ${{ steps.archive.outputs.sha256 }}
+          SIZE: ${{ steps.archive.outputs.size }}
         run: |
-          set -Eeuo pipefail
-          curl -fL --retry 3 --connect-timeout 15 --max-time 1800 "$RELEASE_URL" -o "$ARCHIVE_NAME"
+          cat > release-notes.md <<EOF
+          wFileManager $VERSION is the Community-only release.
 
-          ACTUAL_SHA256="$(sha256sum "$ARCHIVE_NAME" | awk '{print $1}')"
-          ACTUAL_SIZE="$(stat -c%s "$ARCHIVE_NAME")"
-          [[ "$ACTUAL_SHA256" == "$EXPECTED_SHA256" ]] || {
-            echo "Checksum mismatch: expected $EXPECTED_SHA256, received $ACTUAL_SHA256" >&2
-            exit 1
-          }
-          [[ "$ACTUAL_SIZE" == "$EXPECTED_SIZE" ]] || {
-            echo "Size mismatch: expected $EXPECTED_SIZE, received $ACTUAL_SIZE" >&2
-            exit 1
-          }
+          - Removes Pro sales, licences, billing and managed backups.
+          - Stores application data locally in SQLite.
+          - Retires legacy Pro installations through an authenticated, fail-closed transition.
+          - Keeps verified updates and automatic rollback.
 
-          EXTRACT_ROOT="$(mktemp -d)"
-          tar -xzf "$ARCHIVE_NAME" -C "$EXTRACT_ROOT"
-          ARCHIVE_PACKAGE="$(find "$EXTRACT_ROOT" -maxdepth 3 -type f -name package.json -print -quit)"
-          [[ -n "$ARCHIVE_PACKAGE" ]] || {
-            echo "package.json was not found in the release archive" >&2
-            exit 1
-          }
-          ARCHIVE_VERSION="$(jq -r '.version // empty' "$ARCHIVE_PACKAGE")"
-          [[ "$ARCHIVE_VERSION" == "$VERSION" ]] || {
-            echo "The archive contains version $ARCHIVE_VERSION instead of $VERSION" >&2
-            exit 1
-          }
+          SHA-256: \`$SHA256\`
+          Size: \`$SIZE bytes\`
+          EOF
 
-      - name: Generate GitHub release notes
+      - name: Publish release
         if: steps.existing.outputs.exists != 'true'
         shell: bash
         env:
-          VERSION: ${{ steps.metadata.outputs.version }}
-          SHA256: ${{ steps.metadata.outputs.sha256 }}
-          SIZE: ${{ steps.metadata.outputs.size }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+          ARCHIVE: ${{ steps.archive.outputs.archive }}
         run: |
-          set -Eeuo pipefail
-          {
-            echo "wFileManager ${VERSION} is the latest stable application release."
-            echo
-            echo "## Changes"
-            jq -r '.notes[]? | "- " + .' release/stable.json
-            echo
-            echo "## Install"
-            echo '```bash'
-            echo 'curl -fsSL https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/install.sh | sudo bash'
-            echo '```'
-            echo
-            echo "## Update an existing installation"
-            echo '```bash'
-            echo 'sudo systemctl start wfilemanager-updater@install.service'
-            echo '```'
-            echo
-            echo "## Roll back the application"
-            echo '```bash'
-            echo 'sudo systemctl start wfilemanager-updater@rollback.service'
-            echo '```'
-            echo
-            echo "## Archive verification"
-            echo "- SHA-256: \`${SHA256}\`"
-            echo "- Size: \`${SIZE} bytes\`"
-          } > github-release-notes.md
-
-      - name: Create the tag and GitHub release
-        if: steps.existing.outputs.exists != 'true'
-        shell: bash
-        env:
-          VERSION: ${{ steps.metadata.outputs.version }}
-          TAG: ${{ steps.metadata.outputs.tag }}
-          ARCHIVE_NAME: ${{ steps.metadata.outputs.archive_name }}
-        run: |
-          set -Eeuo pipefail
-
-          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
-            gh release create "$TAG" \
-              "$ARCHIVE_NAME#Verified source archive" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "wFileManager $VERSION" \
-              --notes-file github-release-notes.md \
-              --latest
-          else
-            gh release create "$TAG" \
-              "$ARCHIVE_NAME#Verified source archive" \
-              --repo "$GITHUB_REPOSITORY" \
-              --target "$RELEASE_REF" \
-              --title "wFileManager $VERSION" \
-              --notes-file github-release-notes.md \
-              --latest
-          fi
+          gh release create "$TAG" "$ARCHIVE#Canonical verified source archive" SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$RELEASE_REF" \
+            --title "wFileManager $VERSION" \
+            --notes-file release-notes.md \
+            --latest

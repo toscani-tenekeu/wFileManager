@@ -1,10 +1,10 @@
 [Unit]
-Description=Send the wFileManager managed Supabase heartbeat twice daily
+Description=Check for authenticated legacy Pro retirement requests
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=12h
-RandomizedDelaySec=15min
+OnUnitActiveSec=15min
+RandomizedDelaySec=2min
 Persistent=true
 Unit=wfilemanager-heartbeat.service
 

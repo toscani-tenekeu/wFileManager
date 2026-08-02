@@ -1,5 +1,4 @@
-const DATABASE_MODE =
-  import.meta.env.VITE_WFILEMANAGER_DATABASE_MODE === "sqlite" ? "sqlite" : "supabase";
+const DATABASE_MODE = "sqlite";
 
 export type InstanceLifecycleStatus = "active" | "frozen" | "disabled";
 
@@ -21,36 +20,12 @@ export interface AuthUser {
   allowedPaths?: string[];
 }
 
-export interface ProPlanDetails {
-  servicePlan: string | null;
-  subscriptionStatus: string | null;
-  dataStatus: string | null;
-  paidUntil: string | null;
-  nextPaymentAt: string | null;
-  daysRemaining: number | null;
-  storageUsedBytes: number;
-  storageQuotaBytes: number;
-  storagePercent: number;
-  orderReference: string | null;
-  customerEmail: string | null;
-  activatedAt: string | null;
-  pastDueAt: string | null;
-  suspendedAt: string | null;
-}
-
 export interface WFileManagerInstance {
   id: string;
   name: string;
   hostname?: string;
   databaseMode?: string;
   status?: InstanceLifecycleStatus;
-  servicePlan?: string | null;
-  subscriptionStatus?: string | null;
-  dataStatus?: string | null;
-  paidUntil?: string | null;
-  storageUsedBytes?: number;
-  storageQuotaBytes?: number;
-  plan?: ProPlanDetails | null;
 }
 
 export interface WFileManagerRole {
@@ -107,7 +82,6 @@ export interface SetupPayload {
   username: string;
   email?: string;
   password: string;
-  activationToken?: string;
 }
 
 export interface InstanceStatusResponse {

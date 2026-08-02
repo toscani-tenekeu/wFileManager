@@ -26,15 +26,12 @@ import {
   RotateCcw,
   ShieldAlert,
   Mail,
-  CreditCard,
-  Database,
 } from "lucide-react";
 import { SERVER_INFO } from "@/lib/demo/data";
 import { localApi, type UpdateInfo } from "@/lib/local-api";
 import { formatBytes, formatRelative } from "@/lib/format";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
-import { wfilemanagerApi, type ProPlanDetails } from "@/lib/wfilemanager-api";
 
 export const Route = createFileRoute("/_app/about")({
   head: () => ({ meta: [{ title: "About & updates — wFileManager" }] }),
@@ -54,59 +51,11 @@ const ACTIVE_PHASES = new Set([
   "rolling-back",
 ]);
 const SUPPORT_EMAIL = "support@kmerhosting.com";
-const DATA_BACKEND = String(
-  import.meta.env.VITE_WFILEMANAGER_DATABASE_MODE || "sqlite",
-).toLowerCase();
-const IS_PRO = DATA_BACKEND === "supabase";
-
-const edition = IS_PRO
-  ? {
-      name: "Pro",
-      badge: "Managed",
-      backend: "KmerHosting Cloud",
-      price: "$100/year",
-      storage: "5 GB included · 20 GB monthly transfer traffic",
-      backup: "App data backup + recovery",
-      excludes: "Server files and databases",
-    }
-  : {
-      name: "Community",
-      badge: "Local",
-      backend: "SQLite on this server",
-      price: "Free",
-      storage: "/var/lib/wfilemanager/wfilemanager.db",
-      backup: "You manage backups",
-      excludes: "Server files and databases",
-    };
-
-function formatPlanDate(value?: string | null) {
-  if (!value) return "Not available";
-  return new Date(value).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function planDaysRemaining(plan: ProPlanDetails | null) {
-  if (!plan) return "Not available";
-  if (typeof plan.daysRemaining === "number")
-    return `${plan.daysRemaining} day${plan.daysRemaining === 1 ? "" : "s"}`;
-  if (!plan.paidUntil) return "Not available";
-  const days = Math.max(
-    0,
-    Math.ceil((new Date(plan.paidUntil).getTime() - Date.now()) / 86_400_000),
-  );
-  return `${days} day${days === 1 ? "" : "s"}`;
-}
-
 function About() {
   const { user } = useAuth();
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [checking, setChecking] = useState(false);
   const [starting, setStarting] = useState(false);
-  const [plan, setPlan] = useState<ProPlanDetails | null>(null);
-  const [planLoaded, setPlanLoaded] = useState(false);
   const active = Boolean(update && ACTIVE_PHASES.has(update.state.status));
 
   const checkUpdates = async (notify = true) => {
@@ -137,26 +86,6 @@ function About() {
     return () => window.clearInterval(timer);
   }, [active]);
 
-  useEffect(() => {
-    if (!IS_PRO || !user) return;
-    let mounted = true;
-    setPlanLoaded(false);
-    void wfilemanagerApi
-      .me()
-      .then((result) => {
-        if (mounted) setPlan(result.instance.plan || null);
-      })
-      .catch(() => {
-        if (mounted) setPlan(null);
-      })
-      .finally(() => {
-        if (mounted) setPlanLoaded(true);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [user?.id]);
-
   const install = async () => {
     setStarting(true);
     try {
@@ -183,11 +112,6 @@ function About() {
     }
   };
 
-  const storagePercent = Math.min(100, Math.max(0, plan?.storagePercent ?? 0));
-  const storageFull = Boolean(
-    plan && plan.storageQuotaBytes > 0 && plan.storageUsedBytes >= plan.storageQuotaBytes,
-  );
-
   return (
     <div className="mx-auto w-full max-w-4xl p-6">
       <div className="mb-6 flex items-center gap-3">
@@ -212,7 +136,7 @@ function About() {
             <dt className="text-muted-foreground">Edition</dt>
             <dd className="col-span-2">
               <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
-                {edition.name}
+                Community
               </Badge>
             </dd>
             <dt className="text-muted-foreground">License</dt>
@@ -238,98 +162,32 @@ function About() {
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center gap-2 text-base">
             Edition
-            <Badge variant="outline">{edition.badge}</Badge>
+            <Badge variant="outline">Local</Badge>
           </CardTitle>
           <CardDescription>Plan and data storage.</CardDescription>
         </CardHeader>
         <CardContent>
           <dl className="grid gap-3 text-sm md:grid-cols-3">
             <dt className="text-muted-foreground">Plan</dt>
-            <dd className="md:col-span-2 font-medium">{edition.name}</dd>
+            <dd className="md:col-span-2 font-medium">Community</dd>
             <dt className="text-muted-foreground">Data</dt>
-            <dd className="md:col-span-2">{edition.backend}</dd>
+            <dd className="md:col-span-2">SQLite on this server</dd>
             <dt className="text-muted-foreground">Price</dt>
-            <dd className="md:col-span-2">{edition.price}</dd>
+            <dd className="md:col-span-2">Free</dd>
             <dt className="text-muted-foreground">Storage</dt>
-            <dd className="md:col-span-2 font-mono text-xs">{edition.storage}</dd>
+            <dd className="md:col-span-2 font-mono text-xs">
+              /var/lib/wfilemanager/wfilemanager.db
+            </dd>
             <dt className="text-muted-foreground">Backup</dt>
-            <dd className="md:col-span-2">{edition.backup}</dd>
+            <dd className="md:col-span-2">Managed by the server administrator</dd>
             <dt className="text-muted-foreground">Not included</dt>
-            <dd className="md:col-span-2">{edition.excludes}</dd>
+            <dd className="md:col-span-2">Server files and databases</dd>
           </dl>
           <div className="mt-4 rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-            Community and Pro have the same file-manager features. Only app-data hosting changes.
+            wFileManager does not send application data to a managed backend.
           </div>
         </CardContent>
       </Card>
-
-      {IS_PRO && (
-        <Card className="mt-4 overflow-hidden">
-          <CardHeader>
-            <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-              <CreditCard className="h-4 w-4 text-primary" />
-              Pro plan
-              <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
-                Managed
-              </Badge>
-            </CardTitle>
-            <CardDescription>Billing and managed storage.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {!planLoaded && <p className="text-sm text-muted-foreground">Loading plan…</p>}
-            {planLoaded && !plan && (
-              <p className="text-sm text-muted-foreground">Plan details unavailable.</p>
-            )}
-            {plan && (
-              <>
-                {storageFull && (
-                  <Alert variant="destructive">
-                    <AlertDescription>
-                      Managed storage is full. Access may be blocked. Contact
-                      support@kmerhosting.com to increase your Pro quota.
-                    </AlertDescription>
-                  </Alert>
-                )}
-                <dl className="grid gap-3 text-sm md:grid-cols-3">
-                  <dt className="text-muted-foreground">Subscription</dt>
-                  <dd className="md:col-span-2 capitalize">
-                    {plan.subscriptionStatus || "Not available"}
-                  </dd>
-                  <dt className="text-muted-foreground">Days left</dt>
-                  <dd className="md:col-span-2 font-medium">{planDaysRemaining(plan)}</dd>
-                  <dt className="text-muted-foreground">Next payment</dt>
-                  <dd className="md:col-span-2">
-                    {formatPlanDate(plan.nextPaymentAt || plan.paidUntil)}
-                  </dd>
-                  <dt className="text-muted-foreground">Order ref</dt>
-                  <dd className="md:col-span-2 font-mono text-xs">
-                    {plan.orderReference || "Not available"}
-                  </dd>
-                  <dt className="text-muted-foreground">Data status</dt>
-                  <dd className="md:col-span-2 capitalize">{plan.dataStatus || "Not available"}</dd>
-                </dl>
-
-                <div className="rounded-md border border-border bg-muted/20 p-4">
-                  <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                    <div className="flex items-center gap-2 font-medium">
-                      <Database className="h-4 w-4 text-primary" />
-                      Managed storage
-                    </div>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {storagePercent}%
-                    </span>
-                  </div>
-                  <Progress value={storagePercent} />
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span>{formatBytes(plan.storageUsedBytes || 0)} used</span>
-                    <span>{formatBytes(plan.storageQuotaBytes || 0)} quota</span>
-                  </div>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       <Card className="mt-4">
         <CardHeader>

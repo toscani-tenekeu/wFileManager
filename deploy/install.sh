@@ -2,19 +2,15 @@
 set -Eeuo pipefail
 
 MANIFEST_URL="${WFILEMANAGER_UPDATE_MANIFEST_URL:-https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/stable.json}"
-PUBLIC_SUPABASE_URL="https://igihzeyfgwhnuiflamvn.supabase.co"
-LIFECYCLE_API_URL="${WFILEMANAGER_LIFECYCLE_API_URL:-${PUBLIC_SUPABASE_URL}/functions/v1/wfilemanager-instance-lifecycle-api}"
 PORT="${PORT:-1973}"
 DOMAIN="${DOMAIN:-}"
 APP_ROOT="/opt/wfilemanager"
 CONFIG_DIR="/etc/wfilemanager"
 ENV_FILE="$CONFIG_DIR/wfilemanager.env"
 ROOT_RESET_KEY_FILE="$CONFIG_DIR/root-reset.key"
-INSTANCE_SECRET_FILE="$CONFIG_DIR/instance-secret.key"
 STATE_ROOT="/var/lib/wfilemanager"
 PACKAGES_FILE="$STATE_ROOT/installed-packages.txt"
 INSTALL_STATE_FILE="$STATE_ROOT/install-state.env"
-RECOVERY_KIT_FILE="/root/wfilemanager-recovery-kit.txt"
 HEALTH_URL="http://127.0.0.1:$PORT/api/health"
 
 [[ $EUID -eq 0 ]] || { echo "Run this installer with sudo or as root." >&2; exit 1; }
@@ -87,96 +83,6 @@ generate_recovery_key() {
   printf 'WFM-%s\n' "$(printf '%s' "$raw" | fold -w4 | paste -sd- -)"
 }
 
-generate_instance_secret() {
-  openssl rand -hex 32
-}
-
-read_secret() {
-  local prompt="$1" variable=""
-  [[ -r /dev/tty ]] || { echo "$prompt must be supplied through an environment variable." >&2; exit 1; }
-  read -r -s -p "$prompt: " variable </dev/tty
-  echo >/dev/tty
-  printf '%s' "$variable"
-}
-
-lifecycle_delete() {
-  local instance_key="$1" recovery_key="$2" response_file status message
-  response_file="$(mktemp)"
-  status="$(curl -sS --connect-timeout 10 --max-time 60 -o "$response_file" -w '%{http_code}' \
-    -X POST "${LIFECYCLE_API_URL%/}/delete" \
-    -H 'Content-Type: application/json' \
-    -H "x-wfilemanager-instance: $instance_key" \
-    -H "x-wfilemanager-recovery-key: $recovery_key" \
-    --data '{}' || true)"
-  if [[ "$status" != "200" ]]; then
-    message="$(python3 - "$response_file" <<'PY'
-import json, sys
-try:
-    print(json.load(open(sys.argv[1])).get("error", ""))
-except Exception:
-    pass
-PY
-)"
-    rm -f "$response_file"
-    echo "Remote deletion failed (HTTP ${status:-unknown}${message:+: $message})." >&2
-    exit 1
-  fi
-  rm -f "$response_file"
-}
-
-lifecycle_recover() {
-  local instance_key="$1" old_key="$2" new_hash="$3" instance_secret_hash="$4" response_file status message body
-  response_file="$(mktemp)"
-  body="$(jq -cn \
-    --arg newRecoveryTokenHash "$new_hash" \
-    --arg newInstanceSecretHash "$instance_secret_hash" \
-    --arg hostname "$(hostname -f 2>/dev/null || hostname)" \
-    --arg baseUrl "https://$DOMAIN" \
-    '{newRecoveryTokenHash:$newRecoveryTokenHash,newInstanceSecretHash:$newInstanceSecretHash,hostname:$hostname,baseUrl:$baseUrl}')"
-  status="$(curl -sS --connect-timeout 10 --max-time 60 -o "$response_file" -w '%{http_code}' \
-    -X POST "${LIFECYCLE_API_URL%/}/recover" \
-    -H 'Content-Type: application/json' \
-    -H "x-wfilemanager-instance: $instance_key" \
-    -H "x-wfilemanager-recovery-key: $old_key" \
-    --data "$body" || true)"
-  if [[ "$status" != "200" ]]; then
-    message="$(jq -r '.error // empty' "$response_file" 2>/dev/null || true)"
-    rm -f "$response_file"
-    echo "Recovery failed (HTTP ${status:-unknown}${message:+: $message})." >&2
-    exit 1
-  fi
-  jq -e '.success == true and .recoveryKeyRotated == true' "$response_file" >/dev/null || {
-    rm -f "$response_file"
-    echo "Recovery response was invalid." >&2
-    exit 1
-  }
-  rm -f "$response_file"
-}
-
-write_recovery_kit() {
-  local recovery_key="$1"
-  [[ "$DATABASE_MODE" == "supabase" ]] || return 0
-  umask 077
-  cat >"$RECOVERY_KIT_FILE" <<TEXT
-wFileManager Recovery Kit
-
-Instance key: $INSTANCE_KEY
-Recovery key: $recovery_key
-Domain: $DOMAIN
-Application-data plan: Pro — managed application data
-
-Keep this file outside the server. It can recover or permanently delete the managed application data after the server is reinstalled or lost. A successful recovery
-rotates this key, so replace every old copy.
-
-Lifecycle policy:
-- A valid server heartbeat keeps the instance marked active.
-- Missing heartbeats may freeze remote sessions for security.
-- Active paid Pro application data is not deleted solely because the server is offline.
-- Permanent deletion requires an explicit removal request or the applicable service-retention policy after cancellation or expiration.
-TEXT
-  chmod 600 "$RECOVERY_KIT_FILE"
-}
-
 check_systemd "before installation"
 
 EXISTING_DOMAIN=""
@@ -188,68 +94,11 @@ if [[ -f "$ENV_FILE" ]]; then
   EXISTING_INSTANCE_KEY="$(sed -n 's/^WFILEMANAGER_INSTANCE_KEY=//p' "$ENV_FILE" | tail -n1)"
 fi
 
-DATABASE_MODE="${WFILEMANAGER_DATABASE_MODE:-$EXISTING_MODE}"
-while [[ "$DATABASE_MODE" != "supabase" && "$DATABASE_MODE" != "sqlite" ]]; do
-  [[ -r /dev/tty ]] || { echo "Choose WFILEMANAGER_DATABASE_MODE=supabase or sqlite." >&2; exit 1; }
-  cat >/dev/tty <<'TEXT'
-
-Choose where wFileManager stores accounts, roles, sessions and notifications:
-
-1) Pro — managed application data
-   Managed by KmerHosting for paid Pro service and recovery.
-
-2) Community — SQLite on your server
-   Fully local. Data is stored in /var/lib/wfilemanager/wfilemanager.db.
-TEXT
-  read -r -p "Application-data plan [1-2]: " DATABASE_CHOICE </dev/tty
-  case "$DATABASE_CHOICE" in
-    1) DATABASE_MODE="supabase" ;;
-    2) DATABASE_MODE="sqlite" ;;
-    *) echo "Choose 1 or 2." >/dev/tty ;;
-  esac
-done
-
-SUPABASE_ACTION="continue"
-RECOVERY_INSTANCE_KEY="${WFILEMANAGER_RECOVERY_INSTANCE_KEY:-}"
-OLD_RECOVERY_KEY="${WFILEMANAGER_RECOVERY_KEY:-}"
-if [[ "$DATABASE_MODE" == "supabase" && -z "$EXISTING_INSTANCE_KEY" ]]; then
-  SUPABASE_ACTION="${WFILEMANAGER_SUPABASE_ACTION:-}"
-  while [[ "$SUPABASE_ACTION" != "new" && "$SUPABASE_ACTION" != "recover" && "$SUPABASE_ACTION" != "delete" ]]; do
-    [[ -r /dev/tty ]] || { echo "Choose WFILEMANAGER_SUPABASE_ACTION=new, recover or delete." >&2; exit 1; }
-    cat >/dev/tty <<'TEXT'
-
-Pro managed application data installation:
-
-1) Create a new installation
-2) Recover an existing installation with a Recovery Kit
-3) Permanently delete an existing remote installation
-TEXT
-    read -r -p "Action [1-3]: " ACTION_CHOICE </dev/tty
-    case "$ACTION_CHOICE" in
-      1) SUPABASE_ACTION="new" ;;
-      2) SUPABASE_ACTION="recover" ;;
-      3) SUPABASE_ACTION="delete" ;;
-      *) echo "Choose 1, 2 or 3." >/dev/tty ;;
-    esac
-  done
-
-  if [[ "$SUPABASE_ACTION" == "recover" || "$SUPABASE_ACTION" == "delete" ]]; then
-    if [[ -z "$RECOVERY_INSTANCE_KEY" ]]; then
-      [[ -r /dev/tty ]] || { echo "WFILEMANAGER_RECOVERY_INSTANCE_KEY is required." >&2; exit 1; }
-      read -r -p "Instance key: " RECOVERY_INSTANCE_KEY </dev/tty
-    fi
-    [[ -n "$OLD_RECOVERY_KEY" ]] || OLD_RECOVERY_KEY="$(read_secret "Recovery key")"
-  fi
-
-  if [[ "$SUPABASE_ACTION" == "delete" ]]; then
-    [[ -r /dev/tty ]] || { echo "Interactive confirmation is required for deletion." >&2; exit 1; }
-    read -r -p "Type DELETE to permanently remove the managed application data: " DELETE_CONFIRM </dev/tty
-    [[ "$DELETE_CONFIRM" == "DELETE" ]] || { echo "Cancelled."; exit 0; }
-    lifecycle_delete "$RECOVERY_INSTANCE_KEY" "$OLD_RECOVERY_KEY"
-    echo "The Pro managed application data was permanently deleted."
-    exit 0
-  fi
+if [[ "$EXISTING_MODE" == "supabase" ]]; then
+  echo "Legacy Pro installations must update from the application before retirement." >&2
+  exit 1
 fi
+DATABASE_MODE="sqlite"
 
 DOMAIN="${DOMAIN:-$EXISTING_DOMAIN}"
 while true; do
@@ -290,11 +139,10 @@ if ! grep -Fxq "$PUBLIC_IP" <<<"$DNS_ADDRESSES"; then
 fi
 
 echo "Domain verified: $DOMAIN -> $PUBLIC_IP"
-echo "Application-data backend: $DATABASE_MODE"
-[[ "$DATABASE_MODE" == "supabase" ]] && echo "Pro action: $SUPABASE_ACTION"
+echo "Application-data backend: SQLite"
 
 BASE_PACKAGES=(curl ca-certificates jq tar gzip xz-utils unzip openssl nginx certbot python3-certbot-nginx build-essential python3 make g++ sudo passwd util-linux)
-[[ "$DATABASE_MODE" == "sqlite" ]] && BASE_PACKAGES+=(sqlite3)
+BASE_PACKAGES+=(sqlite3)
 NODE_WAS_AVAILABLE=false
 BUN_WAS_AVAILABLE=false
 command -v node >/dev/null 2>&1 && NODE_WAS_AVAILABLE=true
@@ -330,75 +178,37 @@ export PATH="/root/.bun/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 install -d -m 755 "$APP_ROOT/releases" "$CONFIG_DIR" /usr/local/lib/wfilemanager
 install -d -m 700 "$STATE_ROOT" "$STATE_ROOT/trash" "$STATE_ROOT/update"
-if [[ ! -s "$CONFIG_DIR/backup-transfer.key" ]]; then
-  umask 077
-  openssl rand -base64 48 >"$CONFIG_DIR/backup-transfer.key"
-fi
-chmod 600 "$CONFIG_DIR/backup-transfer.key"
 
 INSTANCE_KEY="${WFILEMANAGER_INSTANCE_KEY:-$EXISTING_INSTANCE_KEY}"
-if [[ "$SUPABASE_ACTION" == "recover" ]]; then
-  INSTANCE_KEY="$RECOVERY_INSTANCE_KEY"
-elif [[ -z "$INSTANCE_KEY" ]]; then
+if [[ -z "$INSTANCE_KEY" ]]; then
   INSTANCE_SLUG="$(printf '%s' "$DOMAIN" | sed 's/[^a-z0-9-]/-/g' | sed 's/-\+/-/g' | cut -c1-48)"
   INSTANCE_KEY="wfm-${INSTANCE_SLUG}-$(openssl rand -hex 6)"
 fi
 
 RECOVERY_KEY=""
-if [[ "$SUPABASE_ACTION" == "continue" && -s "$ROOT_RESET_KEY_FILE" ]]; then
+if [[ -s "$ROOT_RESET_KEY_FILE" ]]; then
   RECOVERY_KEY="$(tr -d '\r\n' <"$ROOT_RESET_KEY_FILE")"
 else
   RECOVERY_KEY="$(generate_recovery_key)"
 fi
 
-if [[ "$DATABASE_MODE" == "supabase" && "$SUPABASE_ACTION" == "continue" && ! -s "$ROOT_RESET_KEY_FILE" ]]; then
-  [[ -n "$OLD_RECOVERY_KEY" ]] || OLD_RECOVERY_KEY="${WFILEMANAGER_RECOVERY_KEY:-}"
-  [[ -n "$OLD_RECOVERY_KEY" ]] || OLD_RECOVERY_KEY="$(read_secret "Recovery key from the saved Recovery Kit")"
-  SUPABASE_ACTION="recover"
-  RECOVERY_INSTANCE_KEY="$INSTANCE_KEY"
-fi
-
-INSTANCE_SECRET=""
-if [[ "$DATABASE_MODE" == "supabase" ]]; then
-  if [[ "$SUPABASE_ACTION" == "continue" && -s "$INSTANCE_SECRET_FILE" ]]; then
-    INSTANCE_SECRET="$(tr -d '\r\n' <"$INSTANCE_SECRET_FILE")"
-  else
-    INSTANCE_SECRET="$(generate_instance_secret)"
-  fi
-fi
-
 ROOT_RESET_HASH="$(printf '%s' "$RECOVERY_KEY" | sha256sum | awk '{print $1}')"
-INSTANCE_SECRET_HASH=""
-[[ -n "$INSTANCE_SECRET" ]] && INSTANCE_SECRET_HASH="$(printf '%s' "$INSTANCE_SECRET" | sha256sum | awk '{print $1}')"
-if [[ "$DATABASE_MODE" == "supabase" && "$SUPABASE_ACTION" == "recover" ]]; then
-  lifecycle_recover "$INSTANCE_KEY" "$OLD_RECOVERY_KEY" "$ROOT_RESET_HASH" "$INSTANCE_SECRET_HASH"
-  echo "Pro managed application data installation recovered. Previous sessions, heartbeat credentials and the old recovery key are now invalid."
-fi
 
 umask 077
 printf '%s\n' "$RECOVERY_KEY" >"$ROOT_RESET_KEY_FILE"
 chmod 600 "$ROOT_RESET_KEY_FILE"
-if [[ "$DATABASE_MODE" == "supabase" && -n "$INSTANCE_SECRET" ]]; then
-  printf '%s\n' "$INSTANCE_SECRET" >"$INSTANCE_SECRET_FILE"
-  chmod 600 "$INSTANCE_SECRET_FILE"
-fi
 
 cat >"$ENV_FILE" <<ENV
 PORT=$PORT
 WFILEMANAGER_DOMAIN=$DOMAIN
 WFILEMANAGER_PUBLIC_BASE_URL=https://$DOMAIN
-WFILEMANAGER_PLAN=$([[ "$DATABASE_MODE" == "supabase" ]] && printf 'pro' || printf 'community')
-WFILEMANAGER_DATA_BACKEND=$([[ "$DATABASE_MODE" == "supabase" ]] && printf 'managed' || printf 'sqlite')
-WFILEMANAGER_DATABASE_MODE=$DATABASE_MODE
-VITE_WFILEMANAGER_DATABASE_MODE=$DATABASE_MODE
-VITE_SUPABASE_URL=$PUBLIC_SUPABASE_URL
+WFILEMANAGER_PLAN=community
+WFILEMANAGER_DATA_BACKEND=sqlite
+WFILEMANAGER_DATABASE_MODE=sqlite
+VITE_WFILEMANAGER_DATABASE_MODE=sqlite
 VITE_WFILEMANAGER_INSTANCE_KEY=$INSTANCE_KEY
 VITE_WFILEMANAGER_ROOT_RESET_TOKEN_HASH=$ROOT_RESET_HASH
-VITE_WFILEMANAGER_INSTANCE_SECRET_HASH=$INSTANCE_SECRET_HASH
-WFILEMANAGER_SUPABASE_URL=$PUBLIC_SUPABASE_URL
-WFILEMANAGER_LIFECYCLE_API_URL=$LIFECYCLE_API_URL
 WFILEMANAGER_RECOVERY_KEY_FILE=$ROOT_RESET_KEY_FILE
-WFILEMANAGER_INSTANCE_SECRET_FILE=$INSTANCE_SECRET_FILE
 WFILEMANAGER_INSTANCE_KEY=$INSTANCE_KEY
 WFILEMANAGER_SQLITE_PATH=$STATE_ROOT/wfilemanager.db
 WFILEMANAGER_ALLOW_PSEUDO_FS_WRITE=false
@@ -411,7 +221,6 @@ WFILEMANAGER_HEALTH_URL=$HEALTH_URL
 WFILEMANAGER_SERVICE=wfilemanager.service
 ENV
 chmod 600 "$ENV_FILE"
-write_recovery_kit "$RECOVERY_KEY"
 
 sort -u "$TMP/packages-to-remove.txt" >"$PACKAGES_FILE"
 cat >"$INSTALL_STATE_FILE" <<STATE
@@ -446,9 +255,7 @@ run_systemctl "while enabling wFileManager" enable wfilemanager.service
 
 CURRENT_RELEASE="$(readlink -f "$APP_ROOT/current")"
 install -m 700 "$CURRENT_RELEASE/deploy/wfilemanager-reset-admin-password" /usr/local/sbin/wfilemanager-reset-admin-password
-install -m 700 "$CURRENT_RELEASE/deploy/wfilemanager-backup-worker" /usr/local/sbin/wfilemanager-backup-worker
 install -m 700 "$CURRENT_RELEASE/deploy/uninstall.sh" /usr/local/sbin/wfilemanager-uninstall
-[[ -f "$CURRENT_RELEASE/deploy/wfilemanager-recovery-kit" ]] && install -m 700 "$CURRENT_RELEASE/deploy/wfilemanager-recovery-kit" /usr/local/sbin/wfilemanager-recovery-kit
 
 cat >/etc/nginx/sites-available/wfilemanager <<NGINX
 server {
@@ -495,22 +302,14 @@ if [[ "$READY" != "true" ]]; then
   exit 1
 fi
 
-if [[ "$DATABASE_MODE" == "supabase" && "$SUPABASE_ACTION" != "new" ]]; then
-  systemctl start wfilemanager-heartbeat.service 2>/dev/null || true
-fi
-
 OPEN_PATH="setup"
-[[ -n "$EXISTING_INSTANCE_KEY" || "$SUPABASE_ACTION" == "recover" ]] && OPEN_PATH="login"
+[[ -n "$EXISTING_INSTANCE_KEY" ]] && OPEN_PATH="login"
 
 echo
 echo "wFileManager installation completed."
 echo "Open: https://$DOMAIN/$OPEN_PATH"
-echo "Database: $DATABASE_MODE"
+echo "Database: SQLite"
 echo "Instance key: $INSTANCE_KEY"
-if [[ "$DATABASE_MODE" == "supabase" ]]; then
-  echo "Recovery Kit: $RECOVERY_KIT_FILE"
-  echo "Copy this root-only file outside the server. It is required after a system reinstall."
-fi
 echo
 echo "You can permanently remove the application and its data at any time with:"
 echo "  sudo wfilemanager-uninstall"

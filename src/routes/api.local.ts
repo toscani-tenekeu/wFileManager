@@ -51,10 +51,6 @@ async function downloadRuntime() {
 async function hashRuntime() {
   return import("@/lib/server/file-hash-runtime");
 }
-async function backupRunner() {
-  return import("@/lib/server/backup-runner");
-}
-
 function sameOrigin(request: Request) {
   if (request.headers.get("sec-fetch-site") === "cross-site") return false;
   const origin = request.headers.get("origin");
@@ -399,14 +395,6 @@ export const Route = createFileRoute("/api/local")({
           if (action === "trash-empty") {
             const user = await auth.requirePermission(request, "permanently_delete");
             return json(await api.emptyTrash(user));
-          }
-          if (action === "backup-run") {
-            const user = await auth.requireAdmin(request);
-            const runner = await backupRunner();
-            return json(
-              await runner.startRemoteBackup(body.source, body.jobId, body.signedUrl),
-              202,
-            );
           }
           if (action === "job-start") {
             const operation = String(body.operation || "");

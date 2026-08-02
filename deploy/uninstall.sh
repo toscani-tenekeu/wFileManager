@@ -21,6 +21,18 @@ INSTANCE_SECRET=""
 PACKAGES=()
 REMOVE_PACKAGES=false
 REMOTE_DELETE=false
+RETIRE_PRO=false
+RETIRE_AUTHORIZATION=""
+RETIRE_APP_VERSION=""
+
+while (($# > 0)); do
+  case "$1" in
+    --retire-pro) RETIRE_PRO=true; shift ;;
+    --authorization) RETIRE_AUTHORIZATION="${2:-}"; shift 2 ;;
+    --app-version) RETIRE_APP_VERSION="${2:-}"; shift 2 ;;
+    *) echo "Unknown option: $1" >&2; exit 2 ;;
+  esac
+done
 
 if [[ -f "$ENV_FILE" ]]; then
   set -a
@@ -126,9 +138,37 @@ delete_remote_pro_data() {
   rm -f "$response_file"
 }
 
+verify_retirement_authorization() {
+  local key expected payload
+  [[ "$DATABASE_MODE" == "supabase" || "$PLAN" == "pro" ]] || {
+    echo "Automated Pro retirement refused: this is not a legacy Pro installation." >&2
+    return 1
+  }
+  [[ "$RETIRE_APP_VERSION" == 0.10.* && "$RETIRE_AUTHORIZATION" =~ ^[a-f0-9]{64}$ ]] || {
+    echo "Automated Pro retirement refused: invalid version or authorization." >&2
+    return 1
+  }
+  if [[ -n "$INSTANCE_SECRET" ]]; then
+    key="$INSTANCE_SECRET"
+  elif [[ -n "$RECOVERY_KEY" ]]; then
+    key="$RECOVERY_KEY"
+  else
+    echo "Automated Pro retirement refused: no local instance credential." >&2
+    return 1
+  fi
+  payload="retire-pro:${INSTANCE_KEY}:${RETIRE_APP_VERSION}"
+  expected="$(printf '%s' "$payload" | openssl dgst -sha256 -hmac "$key" | awk '{print $NF}')"
+  [[ "$expected" == "$RETIRE_AUTHORIZATION" ]] || {
+    echo "Automated Pro retirement refused: authorization did not match this instance." >&2
+    return 1
+  }
+}
+
 local_remove() {
   systemctl disable --now wfilemanager-heartbeat.timer 2>/dev/null || true
-  systemctl stop wfilemanager-heartbeat.service 2>/dev/null || true
+  if [[ "$RETIRE_PRO" != "true" ]]; then
+    systemctl stop wfilemanager-heartbeat.service 2>/dev/null || true
+  fi
   systemctl disable --now wfilemanager.service 2>/dev/null || true
   systemctl disable --now wfilemanager-updater@install.service 2>/dev/null || true
   systemctl disable --now wfilemanager-updater@rollback.service 2>/dev/null || true
@@ -169,6 +209,16 @@ remove_packages_if_requested() {
 }
 
 print_detected
+
+if [[ "$RETIRE_PRO" == "true" ]]; then
+  verify_retirement_authorization
+  REMOVE_PACKAGES=false
+  REMOTE_DELETE=true
+  delete_remote_pro_data
+  local_remove
+  echo "wFileManager Pro was retired after authenticated remote deletion. System packages were kept."
+  exit 0
+fi
 
 if [[ "$DATABASE_MODE" == "supabase" || "$PLAN" == "pro" ]]; then
   cat <<'TEXT'

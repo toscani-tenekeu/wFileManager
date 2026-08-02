@@ -40,6 +40,9 @@ type InstanceRecord = {
   frozen_at: string | null;
   delete_after_at: string | null;
   recovered_at: string | null;
+  last_app_version: string | null;
+  capabilities: unknown;
+  decommission_requested_at: string | null;
 };
 
 type Authorization = {
@@ -56,6 +59,26 @@ function hex(bytes: Uint8Array) {
 
 async function sha256(value: string) {
   return hex(new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value))));
+}
+
+async function hmacSha256(key: string, value: string) {
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(key),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  return hex(new Uint8Array(await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(value))));
+}
+
+function supportsProDecommission(version: string, capabilities: string[]) {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(version);
+  if (!match) return false;
+  const [major, minor, patch] = match.slice(1).map(Number);
+  const versionSupported =
+    major > 0 || (major === 0 && (minor > 10 || (minor === 10 && patch >= 0)));
+  return versionSupported && capabilities.includes("pro-decommission-v1");
 }
 
 function safeEqual(left: string, right: string) {
@@ -104,7 +127,7 @@ async function loadInstance(instanceKey: string) {
   const { data: instance, error } = await supabase
     .from("wfilemanager_instances")
     .select(
-      "id,instance_key,name,hostname,base_url,status,service_plan,subscription_status,data_status,paid_until,past_due_at,suspended_at,last_seen_at,frozen_at,delete_after_at,recovered_at",
+      "id,instance_key,name,hostname,base_url,status,service_plan,subscription_status,data_status,paid_until,past_due_at,suspended_at,last_seen_at,frozen_at,delete_after_at,recovered_at,last_app_version,capabilities,decommission_requested_at",
     )
     .eq("instance_key", instanceKey)
     .maybeSingle<InstanceRecord>();
@@ -244,6 +267,10 @@ Deno.serve(async (request: Request) => {
     const now = new Date().toISOString();
     const baseUrl = typeof body.baseUrl === "string" ? body.baseUrl.trim() : null;
     const hostname = typeof body.hostname === "string" ? body.hostname.trim() : null;
+    const appVersion = typeof body.appVersion === "string" ? body.appVersion.trim() : "";
+    const capabilities = Array.isArray(body.capabilities)
+      ? body.capabilities.filter((value): value is string => typeof value === "string").slice(0, 16)
+      : [];
 
     if (action === "status") {
       return json({
@@ -268,6 +295,8 @@ Deno.serve(async (request: Request) => {
       };
       if (baseUrl) update.base_url = baseUrl;
       if (hostname) update.hostname = hostname;
+      if (appVersion) update.last_app_version = appVersion;
+      update.capabilities = capabilities;
 
       if (!isSuspendedForBilling(authorized.instance)) {
         update.status =
@@ -300,7 +329,7 @@ Deno.serve(async (request: Request) => {
         );
       }
 
-      return json({
+      const response: Record<string, unknown> = {
         success: true,
         status: update.status || authorized.instance.status,
         subscriptionStatus: authorized.instance.subscription_status,
@@ -308,7 +337,19 @@ Deno.serve(async (request: Request) => {
         authorization: authorized.method,
         reactivated: authorized.instance.status === "frozen",
         lastSeenAt: now,
-      });
+      };
+      if (
+        authorized.instance.decommission_requested_at &&
+        supportsProDecommission(appVersion, capabilities)
+      ) {
+        const credential = instanceSecret || recoveryKey;
+        response.action = "retire-pro";
+        response.actionAuthorization = await hmacSha256(
+          credential,
+          `retire-pro:${authorized.instance.instance_key}:${appVersion}`,
+        );
+      }
+      return json(response);
     }
 
     if (action === "recover") {

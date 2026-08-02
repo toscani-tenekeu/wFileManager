@@ -15,6 +15,9 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
+const LEGACY_PRO_INSTALLATION =
+  String(import.meta.env.VITE_WFILEMANAGER_DATABASE_MODE || "sqlite").toLowerCase() === "supabase";
+
 function LoginPage() {
   const nav = useNavigate();
   const auth = useAuth();
@@ -25,9 +28,23 @@ function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!auth.loading && auth.user) nav({ to: "/" });
-    if (!auth.loading && auth.configured === false) nav({ to: "/setup" });
+    if (!LEGACY_PRO_INSTALLATION && !auth.loading && auth.user) nav({ to: "/" });
+    if (!LEGACY_PRO_INSTALLATION && !auth.loading && auth.configured === false)
+      nav({ to: "/setup" });
   }, [auth.loading, auth.user, auth.configured, nav]);
+
+  if (LEGACY_PRO_INSTALLATION) {
+    return (
+      <AuthShell title="Pro service retirement pending" desc="This installation is being retired.">
+        <Alert>
+          <AlertDescription>
+            The authenticated server heartbeat will delete the managed account before removing
+            wFileManager locally. Ordinary server files and system packages are not removed.
+          </AlertDescription>
+        </Alert>
+      </AuthShell>
+    );
+  }
 
   return (
     <AuthShell title="Sign in" desc="Access your wFileManager administration panel.">

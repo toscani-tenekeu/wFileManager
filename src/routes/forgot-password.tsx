@@ -30,8 +30,7 @@ function Page() {
           sudo wfilemanager-reset-admin-password
         </pre>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Pro installations can also be recovered after a server reinstall with the saved Recovery
-          Kit. wFileManager does not pretend to send reset emails for local administrator accounts.
+          wFileManager does not send reset emails for local administrator accounts.
         </p>
         <Button asChild className="w-full">
           <Link to="/login">Return to sign in</Link>
