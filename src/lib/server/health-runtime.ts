@@ -28,12 +28,24 @@ async function timed(name: string, operation: () => Promise<string>): Promise<He
 }
 
 async function databaseCheck() {
+  await mkdir(path.dirname(DB_PATH), { recursive: true, mode: 0o700 });
   const sqlite = await import("node:sqlite");
-  const database = new sqlite.DatabaseSync(DB_PATH, { readOnly: true });
+  const database = new sqlite.DatabaseSync(DB_PATH);
   try {
-    database.prepare("SELECT 1 AS healthy").get();
-    database.prepare("SELECT value FROM wfm_meta WHERE key = 'configured'").get();
-    return "SQLite database is readable";
+    database.exec(`
+      PRAGMA busy_timeout = 5000;
+      CREATE TABLE IF NOT EXISTS wfm_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `);
+    database.prepare("PRAGMA quick_check").get();
+    const configured = database
+      .prepare("SELECT value FROM wfm_meta WHERE key = 'configured'")
+      .get() as { value?: string } | undefined;
+    return configured?.value === "true"
+      ? "Local database is ready"
+      : "Local database initialized; setup pending";
   } finally {
     database.close();
   }

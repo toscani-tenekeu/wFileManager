@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { assertSafeExistingMutation } from "../src/lib/server/safe-path-runtime";
 import { saveRawUpload } from "../src/lib/server/upload-runtime";
@@ -87,28 +88,36 @@ describe("authentication protection", () => {
 });
 
 describe("application health", () => {
-  test("checks application metadata and persistent filesystem access", async () => {
+  test("initializes a missing local database and checks persistent filesystem access", async () => {
     const stateRoot = await temporaryDirectory("wfm-health-");
     const databasePath = path.join(stateRoot, "wfilemanager.db");
-    await execFileAsync("node", [
-      "-e",
-      [
-        "const { DatabaseSync } = require('node:sqlite')",
-        "const database = new DatabaseSync(process.argv[1])",
-        "database.exec('CREATE TABLE wfm_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)')",
-        "database.prepare('INSERT INTO wfm_meta (key, value) VALUES (?, ?)').run('configured', 'true')",
-        "database.close()",
-      ].join(";"),
-      databasePath,
-    ]);
-    process.env.WFILEMANAGER_SQLITE_PATH = databasePath;
     process.env.WFILEMANAGER_STATE_ROOT = stateRoot;
     const { healthSummary } = await import("../src/lib/server/health-runtime");
     const application = await healthSummary("application");
     const filesystem = await healthSummary("filesystem");
+    const healthRuntimeUrl = pathToFileURL(
+      path.join(process.cwd(), "src/lib/server/health-runtime.ts"),
+    ).href;
+    await execFileAsync(
+      "node",
+      [
+        "--experimental-strip-types",
+        "--input-type=module",
+        "-e",
+        `const { healthSummary } = await import(${JSON.stringify(healthRuntimeUrl)}); const result = await healthSummary("database"); if (!result.ok || result.checks[0]?.message !== "Local database initialized; setup pending") throw new Error(JSON.stringify(result));`,
+      ],
+      {
+        env: {
+          ...process.env,
+          WFILEMANAGER_SQLITE_PATH: databasePath,
+          WFILEMANAGER_STATE_ROOT: stateRoot,
+        },
+      },
+    );
 
     expect(application.ok).toBe(true);
     expect(application.checks.map((check) => check.name)).toEqual(["application"]);
+    expect((await readFile(databasePath)).byteLength).toBeGreaterThan(0);
     expect(filesystem.ok).toBe(true);
     expect(filesystem.checks.map((check) => check.name)).toEqual(["filesystem"]);
   });
