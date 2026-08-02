@@ -1,38 +1,16 @@
-# Supabase status
-
-Project: `kmerhosting`
+# Supabase release hosting
 
 Project ID: `igihzeyfgwhnuiflamvn`
 
-wFileManager does not use Supabase Auth. Users and opaque sessions are stored in ordinary application tables.
+wFileManager uses Supabase only to distribute verified release assets. Application accounts,
+sessions, roles, settings, notifications and filesystem data are created and managed locally by the
+installed application.
 
-## Deployed database objects
+The retained wFileManager resources are:
 
-- `wfilemanager_instances`
-- `wfilemanager_roles`
-- `wfilemanager_users`
-- `wfilemanager_sessions`
-- `wfilemanager_path_rules`
-- `wfilemanager_settings`
-- `wfilemanager_audit_logs`
+- the public `releases.kmerhosting.com` Storage bucket;
+- the `wfilemanager/` release prefix;
+- `wfilemanager_release_publish_tokens` for short-lived publisher authorization;
+- the `wfilemanager-release-publisher` Edge Function.
 
-## Deployed Edge Function
-
-`wfilemanager-api`
-
-Implemented actions:
-
-- installation status
-- first administrator setup
-- login
-- current session
-- logout
-- list users
-- create a standard user
-- audit log retrieval
-
-Passwords are currently derived with PBKDF2-SHA-256 and unique salts. Session tokens are opaque and only their SHA-256 hashes are stored.
-
-## Current boundary
-
-Supabase stores application accounts, sessions, roles, path policies, settings and audit metadata. It does not access the Ubuntu filesystem. The existing File Explorer remains in safe demonstration mode until a local privileged Ubuntu agent is implemented and connected.
+No installed application sends runtime data to Supabase.

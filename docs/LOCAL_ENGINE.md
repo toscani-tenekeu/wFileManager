@@ -14,7 +14,8 @@ Implemented operations:
 - system summary
 - command execution
 
-Every request requires the custom bearer token issued by the `wfilemanager-api` Supabase Edge Function. The local engine calls the Edge Function's `me` action and permits only active administrators.
+Every request requires an opaque application session issued and verified by the local wFileManager
+runtime. Authorization policies are evaluated on the same server before filesystem access.
 
 The terminal now uses a persistent Linux PTY rendered with xterm.js. It supports interactive programs, terminal resizing, multiple tabs, and live input/output. The browser currently exchanges PTY data through short authenticated polling requests rather than a WebSocket.
 
@@ -22,7 +23,8 @@ The terminal now uses a persistent Linux PTY rendered with xterm.js. It supports
 
 Each active wFileManager account is mapped to a dedicated Ubuntu account named `wfm_<username>_<id>`. The local account is created with a home directory, Bash login shell and membership in the `sudo` group. Its password is synchronized when the user logs in, when an administrator creates the user, or when the user confirms root elevation.
 
-Terminal tabs start under the dedicated Linux UID/GID. Root tabs are created only after the current wFileManager password is verified by the custom Supabase Edge Function. No Supabase Auth user is involved.
+Terminal tabs start under the dedicated Linux UID/GID. Root tabs are created only after the current
+wFileManager password is verified locally.
 
 ## Transfer progress
 

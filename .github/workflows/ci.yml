@@ -56,7 +56,6 @@ jobs:
             bash -n deploy/update.sh
             bash -n deploy/uninstall.sh
             bash -n deploy/wfilemanager-reset-admin-password
-            bash -n deploy/wfilemanager-heartbeat
           } >"$CI_LOG_DIR/shell.log" 2>&1
       - uses: actions/upload-artifact@v4
         if: always()

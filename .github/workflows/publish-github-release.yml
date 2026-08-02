@@ -80,11 +80,10 @@ jobs:
           SIZE: ${{ steps.archive.outputs.size }}
         run: |
           cat > release-notes.md <<EOF
-          wFileManager $VERSION is the Community-only release.
+          wFileManager $VERSION is free and open source under the MIT License.
 
-          - Removes Pro sales, licences, billing and managed backups.
-          - Stores application data locally in SQLite.
-          - Retires legacy Pro installations through an authenticated, fail-closed transition.
+          - Ships the complete wFileManager application without plans or licence keys.
+          - Keeps application data under the operator's control.
           - Keeps verified updates and automatic rollback.
 
           SHA-256: \`$SHA256\`

@@ -26,9 +26,6 @@ const STEPS = [
   { key: "review", label: "Review", icon: CircleCheck },
 ] as const;
 
-const LEGACY_PRO_INSTALLATION =
-  String(import.meta.env.VITE_WFILEMANAGER_DATABASE_MODE || "sqlite").toLowerCase() === "supabase";
-
 function Setup() {
   const nav = useNavigate();
   const auth = useAuth();
@@ -54,9 +51,8 @@ function Setup() {
   );
 
   useEffect(() => {
-    if (!LEGACY_PRO_INSTALLATION && !auth.loading && auth.user) nav({ to: "/" });
-    if (!LEGACY_PRO_INSTALLATION && !auth.loading && auth.configured === true && !auth.user)
-      nav({ to: "/login" });
+    if (!auth.loading && auth.user) nav({ to: "/" });
+    if (!auth.loading && auth.configured === true && !auth.user) nav({ to: "/login" });
   }, [auth.loading, auth.user, auth.configured, nav]);
 
   const completeSetup = async () => {
@@ -78,19 +74,6 @@ function Setup() {
       setSubmitting(false);
     }
   };
-
-  if (LEGACY_PRO_INSTALLATION) {
-    return (
-      <AuthShell title="Pro service retirement pending" desc="This installation is being retired.">
-        <Alert>
-          <AlertDescription>
-            The authenticated server heartbeat will delete the managed account before removing
-            wFileManager locally. Ordinary server files and system packages are not removed.
-          </AlertDescription>
-        </Alert>
-      </AuthShell>
-    );
-  }
 
   return (
     <AuthShell title="Set up wFileManager" desc="Create the first administrator.">
@@ -115,7 +98,7 @@ function Setup() {
           <CardContent className="space-y-3 pt-6 text-sm">
             <p>Create the administrator account for this server.</p>
             <p className="text-muted-foreground">
-              Application data is stored locally in SQLite. The account is not a Linux user.
+              Application state remains on this server. The account is not a Linux user.
             </p>
           </CardContent>
         </Card>
@@ -189,8 +172,6 @@ function Setup() {
               </dd>
               <dt className="text-muted-foreground">Email</dt>
               <dd className="col-span-2">{form.email || "Not set"}</dd>
-              <dt className="text-muted-foreground">Data</dt>
-              <dd className="col-span-2">SQLite on this server</dd>
             </dl>
           </CardContent>
         </Card>

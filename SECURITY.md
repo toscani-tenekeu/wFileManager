@@ -46,7 +46,7 @@ Reports are especially relevant for:
 - update verification or rollback bypass;
 - persistent XSS in privileged pages;
 - unsafe access to `/proc`, `/sys`, `/dev` or `/run`;
-- weaknesses in the Community SQLite or Pro managed application-data backends.
+- weaknesses in authentication or application-state handling.
 
 Expected administrator capabilities are not vulnerabilities by themselves. A report must show access beyond the user's intended permissions or a bypass of a security boundary.
 
@@ -83,14 +83,9 @@ sudo wfilemanager-reset-admin-password
 
 Recovery files must remain readable only by root. Password recovery revokes existing sessions.
 
-wFileManager supports:
-
-- Community SQLite stored under `/var/lib/wfilemanager` on the user's server;
-- Pro managed application data isolated by installation key.
-
-Community SQLite must retain WAL mode, foreign keys, parameterized queries and root-only file permissions. Pro managed queries must retain installation and user isolation.
-
-Pro backups and recovery cover wFileManager application records only. Files and other data on the server filesystem require a separate backup and recovery strategy.
+wFileManager keeps application state under `/var/lib/wfilemanager`. The local store must retain WAL
+mode, foreign keys, parameterized queries and root-only file permissions. Files and other data on
+the server filesystem require a separate backup and recovery strategy.
 
 ## Filesystem and update protections
 

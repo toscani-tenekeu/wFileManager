@@ -35,7 +35,6 @@ upload update.sh text/x-shellscript
 upload uninstall.sh text/x-shellscript
 upload wfilemanager.service text/plain
 upload 'wfilemanager-updater@.service' text/plain
-upload migrate-existing-vps.sh text/x-shellscript
 upload SHA256SUMS text/plain
 upload stable.json application/json
 

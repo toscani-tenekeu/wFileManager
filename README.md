@@ -4,17 +4,15 @@ wFileManager is a browser-based file manager for Ubuntu servers. It provides fil
 uploads and downloads, guarded archive handling, per-user trash, application users and roles,
 notifications, verified updates, rollback and an administrator-only root terminal.
 
-## Community edition
-
-wFileManager has one edition. It is free, MIT licensed and stores its application records locally
-in SQLite at:
+wFileManager is fully open source and distributed under the MIT License. It has no fees, licence
+keys or hosted application-data service. Runtime state is kept under:
 
 ```text
 /var/lib/wfilemanager/wfilemanager.db
 ```
 
-The server administrator is responsible for backing up and restoring that database as well as the
-server files, websites and databases managed through the application.
+The server administrator is responsible for backing up and restoring application state as well as
+the server files, websites and databases managed through the application.
 
 ## Install
 

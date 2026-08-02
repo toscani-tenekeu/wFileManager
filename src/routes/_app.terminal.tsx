@@ -78,8 +78,8 @@ function TerminalPage() {
         theme: {
           background: "#171719",
           foreground: "#e8e8e8",
-          cursor: "#3ecf8e",
-          selectionBackground: "#3ecf8e55",
+          cursor: "#1A73E8",
+          selectionBackground: "#1A73E855",
           black: "#171719",
           red: "#f87171",
           green: "#3ecf8e",

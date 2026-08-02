@@ -27,17 +27,6 @@ import { Readable } from "node:stream";
 
 const execFileAsync = promisify(execFile);
 
-const SUPABASE_URL =
-  process.env.WFILEMANAGER_SUPABASE_URL ||
-  process.env.VITE_SUPABASE_URL ||
-  "https://igihzeyfgwhnuiflamvn.supabase.co";
-const INSTANCE_KEY =
-  process.env.WFILEMANAGER_INSTANCE_KEY ||
-  process.env.VITE_WFILEMANAGER_INSTANCE_KEY ||
-  "wfilemanager-kmerhosting-com";
-const AUTH_URL = `${SUPABASE_URL}/functions/v1/wfilemanager-api/me`;
-const VERIFY_PASSWORD_URL = `${SUPABASE_URL}/functions/v1/wfilemanager-api/verify-password`;
-const ROLE_ACCESS_URL = `${SUPABASE_URL}/functions/v1/wfilemanager-roles-api/permissions`;
 const MAX_TEXT_BYTES = Number(process.env.WFILEMANAGER_MAX_TEXT_BYTES || 5 * 1024 * 1024);
 const TRASH_ROOT = path.resolve(
   process.env.WFILEMANAGER_TRASH_DIR || "/var/lib/wfilemanager/trash",
@@ -49,8 +38,6 @@ const UPDATE_STATE_FILE =
   process.env.WFILEMANAGER_UPDATE_STATE_FILE || "/var/lib/wfilemanager/update/state.json";
 const UPDATE_SCRIPT =
   process.env.WFILEMANAGER_UPDATE_SCRIPT || "/usr/local/lib/wfilemanager/update.sh";
-
-const authCache = new Map<string, { expiresAt: number; user: LocalUser }>();
 
 export class LocalApiError extends Error {
   status: number;
@@ -98,136 +85,6 @@ export interface TrashItem {
   deletedBy: string;
   size: number;
   kind: LocalFileEntry["kind"];
-}
-
-function tokenFromRequest(request: Request) {
-  const value = request.headers.get("authorization") || "";
-  return value.startsWith("Bearer ") ? value.slice(7).trim() : "";
-}
-
-export async function requireUser(request: Request): Promise<LocalUser> {
-  const token = tokenFromRequest(request);
-  if (!token) throw new LocalApiError(401, "Missing session token");
-
-  const cached = authCache.get(token);
-  if (cached && cached.expiresAt > Date.now()) return cached.user;
-
-  const response = await fetch(AUTH_URL, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "x-wfilemanager-instance": INSTANCE_KEY,
-    },
-  });
-
-  if (!response.ok) {
-    authCache.delete(token);
-    throw new LocalApiError(401, "Your wFileManager session is invalid or expired");
-  }
-
-  const payload = (await response.json()) as { user?: LocalUser };
-  if (!payload.user || payload.user.status !== "active") {
-    throw new LocalApiError(403, "This account is not active");
-  }
-
-  let user = payload.user;
-  try {
-    const roleResponse = await fetch(ROLE_ACCESS_URL, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "x-wfilemanager-instance": INSTANCE_KEY,
-      },
-    });
-    if (roleResponse.ok) {
-      const access = (await roleResponse.json()) as {
-        roleId?: string | null;
-        roleName?: string | null;
-        permissions?: string[];
-      };
-      user = {
-        ...user,
-        roleId: access.roleId ?? user.roleId,
-        roleName: access.roleName ?? user.roleName,
-        permissions: Array.isArray(access.permissions)
-          ? access.permissions.filter((permission) => permission !== "use_terminal")
-          : [],
-      };
-    }
-  } catch {
-    if (!user.isAdmin) user = { ...user, permissions: [] };
-  }
-
-  authCache.set(token, { user, expiresAt: Date.now() + 30_000 });
-  return user;
-}
-
-export function assertAdmin(user: LocalUser) {
-  if (!user.isAdmin)
-    throw new LocalApiError(403, "Administrator access is required for this operation");
-}
-
-export function assertPermission(user: LocalUser, permission: string) {
-  if (user.isAdmin) return;
-  if (permission === "use_terminal")
-    throw new LocalApiError(403, "Terminal access is reserved for administrators");
-  if (!Array.isArray(user.permissions) || !user.permissions.includes(permission)) {
-    throw new LocalApiError(
-      403,
-      `Your role does not include the ${permission.replace(/_/g, " ")} permission`,
-    );
-  }
-}
-
-export function assertAnyPermission(user: LocalUser, permissions: string[]) {
-  if (user.isAdmin) return;
-  const assignable = permissions.filter((permission) => permission !== "use_terminal");
-  if (
-    !Array.isArray(user.permissions) ||
-    !assignable.some((permission) => user.permissions?.includes(permission))
-  ) {
-    throw new LocalApiError(403, "Your role does not allow this operation");
-  }
-}
-
-export async function requireAdmin(request: Request) {
-  const user = await requireUser(request);
-  assertAdmin(user);
-  return user;
-}
-
-export async function requirePermission(request: Request, permission: string) {
-  const user = await requireUser(request);
-  assertPermission(user, permission);
-  return user;
-}
-
-export async function requireAnyPermission(request: Request, permissions: string[]) {
-  const user = await requireUser(request);
-  assertAnyPermission(user, permissions);
-  return user;
-}
-
-export async function verifyCurrentPassword(request: Request, passwordInput: unknown) {
-  const token = tokenFromRequest(request);
-  const password = typeof passwordInput === "string" ? passwordInput : "";
-  if (!token || !password) throw new LocalApiError(400, "Your current password is required");
-
-  const response = await fetch(VERIFY_PASSWORD_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      "x-wfilemanager-instance": INSTANCE_KEY,
-    },
-    body: JSON.stringify({ password }),
-  });
-  const payload = (await response.json().catch(() => ({}))) as { valid?: boolean; error?: string };
-  if (!response.ok || !payload.valid) {
-    throw new LocalApiError(
-      response.status === 429 ? 429 : 401,
-      payload.error || "The password is incorrect",
-    );
-  }
-  return true;
 }
 
 export function normalizeServerPath(input: unknown, fallback = "/") {

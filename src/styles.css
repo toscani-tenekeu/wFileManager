@@ -6,9 +6,8 @@
 
 /*
  * wFileManager design system.
- * Inspired by the Supabase design language: deep neutral surfaces,
- * a saturated green accent, Inter for UI, JetBrains Mono for code.
- * All colors use oklch. Tokens are consumed via @theme inline.
+ * Deep neutral surfaces, a clear blue accent, Inter for UI and
+ * JetBrains Mono for code. Tokens are consumed via @theme inline.
  */
 
 @theme inline {
@@ -81,9 +80,8 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.16 0.01 250);
 
-  /* Supabase-style green */
-  --primary: oklch(0.72 0.17 156);
-  --primary-foreground: oklch(0.14 0.02 160);
+  --primary: #1A73E8;
+  --primary-foreground: #ffffff;
 
   --secondary: oklch(0.965 0.005 250);
   --secondary-foreground: oklch(0.2 0.01 250);
@@ -104,9 +102,9 @@
   --border: oklch(0.92 0.005 250);
   --border-strong: oklch(0.86 0.008 250);
   --input: oklch(0.92 0.005 250);
-  --ring: oklch(0.72 0.17 156);
+  --ring: #1A73E8;
 
-  --chart-1: oklch(0.72 0.17 156);
+  --chart-1: #1A73E8;
   --chart-2: oklch(0.62 0.16 240);
   --chart-3: oklch(0.78 0.15 75);
   --chart-4: oklch(0.62 0.22 27);
@@ -114,16 +112,16 @@
 
   --sidebar: oklch(0.985 0.003 250);
   --sidebar-foreground: oklch(0.2 0.01 250);
-  --sidebar-primary: oklch(0.72 0.17 156);
-  --sidebar-primary-foreground: oklch(0.14 0.02 160);
+  --sidebar-primary: #1A73E8;
+  --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: oklch(0.955 0.008 250);
   --sidebar-accent-foreground: oklch(0.2 0.01 250);
   --sidebar-border: oklch(0.92 0.005 250);
-  --sidebar-ring: oklch(0.72 0.17 156);
+  --sidebar-ring: #1A73E8;
 }
 
 .dark {
-  /* Dark — Supabase-like deep neutrals */
+  /* Dark neutral surfaces */
   --background: oklch(0.145 0.005 260);
   --foreground: oklch(0.955 0.005 250);
   --surface: oklch(0.185 0.006 260);
@@ -133,8 +131,8 @@
   --popover: oklch(0.2 0.006 260);
   --popover-foreground: oklch(0.955 0.005 250);
 
-  --primary: oklch(0.78 0.18 156);
-  --primary-foreground: oklch(0.14 0.02 160);
+  --primary: #1A73E8;
+  --primary-foreground: #ffffff;
 
   --secondary: oklch(0.23 0.007 260);
   --secondary-foreground: oklch(0.955 0.005 250);
@@ -155,9 +153,9 @@
   --border: oklch(0.28 0.008 260);
   --border-strong: oklch(0.36 0.008 260);
   --input: oklch(0.28 0.008 260);
-  --ring: oklch(0.78 0.18 156);
+  --ring: #1A73E8;
 
-  --chart-1: oklch(0.78 0.18 156);
+  --chart-1: #1A73E8;
   --chart-2: oklch(0.7 0.16 240);
   --chart-3: oklch(0.8 0.16 75);
   --chart-4: oklch(0.66 0.22 27);
@@ -165,12 +163,12 @@
 
   --sidebar: oklch(0.165 0.006 260);
   --sidebar-foreground: oklch(0.9 0.005 250);
-  --sidebar-primary: oklch(0.78 0.18 156);
-  --sidebar-primary-foreground: oklch(0.14 0.02 160);
+  --sidebar-primary: #1A73E8;
+  --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: oklch(0.23 0.007 260);
   --sidebar-accent-foreground: oklch(0.98 0.005 250);
   --sidebar-border: oklch(0.24 0.008 260);
-  --sidebar-ring: oklch(0.78 0.18 156);
+  --sidebar-ring: #1A73E8;
 }
 
 @layer base {

@@ -15,7 +15,7 @@ Do not rebuild the archive for another channel.
 5. Upload `install.sh`, `update.sh`, service units and `uninstall.sh`.
 6. Publish `stable.json` last with the canonical archive URL, checksum and byte size.
 7. Verify the public manifest and every referenced asset.
-8. Test a clean Community installation, update and rollback.
+8. Test a clean installation, update and rollback.
 
 Publishing `stable.json` last prevents clients from observing an incomplete release.
 

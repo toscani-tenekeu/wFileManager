@@ -26,8 +26,6 @@ export const Route = createFileRoute("/_app")({
 
 const UPDATE_CHECK_INTERVAL_MS = 1_800;
 const UPDATE_START_GRACE_MS = 6_000;
-const LEGACY_PRO_INSTALLATION =
-  String(import.meta.env.VITE_WFILEMANAGER_DATABASE_MODE || "sqlite").toLowerCase() === "supabase";
 const UPDATE_BLOCKING_PHASES = new Set([
   "downloading",
   "verifying",
@@ -63,28 +61,10 @@ function AppLayout() {
   const auth = useAuth();
   const navigate = useNavigate();
   useEffect(() => {
-    if (!LEGACY_PRO_INSTALLATION && !auth.loading && !auth.user) {
+    if (!auth.loading && !auth.user) {
       navigate({ to: auth.configured === false ? "/setup" : "/login" });
     }
   }, [auth.loading, auth.user, auth.configured, navigate]);
-
-  if (LEGACY_PRO_INSTALLATION) {
-    return (
-      <div className="grid min-h-screen place-items-center bg-background p-6 text-foreground">
-        <div className="w-full max-w-lg rounded-md border border-border bg-card p-6">
-          <div className="mb-4 flex items-center gap-3">
-            <ShieldAlert className="h-5 w-5 text-amber-500" />
-            <h1 className="text-lg font-semibold">Pro service retirement pending</h1>
-          </div>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            This legacy Pro installation is waiting for the authenticated retirement request. The
-            server heartbeat will remove the managed account before removing wFileManager locally.
-            Ordinary server files and system packages are not removed.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   if (auth.loading || !auth.user) {
     return (

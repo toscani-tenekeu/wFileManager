@@ -264,7 +264,7 @@ export const ROOT: FsNode = dir("/", [
             file("logo.svg", {
               size: 640,
               content:
-                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#3ecf8e"/></svg>',
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#1A73E8"/></svg>',
             }),
           ]),
           dir("Projects", [

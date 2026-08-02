@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
@@ -133,14 +132,10 @@ function About() {
             <dd className="col-span-2 font-mono">
               {update?.currentVersion || SERVER_INFO.wfmVersion}
             </dd>
-            <dt className="text-muted-foreground">Edition</dt>
-            <dd className="col-span-2">
-              <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
-                Community
-              </Badge>
-            </dd>
             <dt className="text-muted-foreground">License</dt>
             <dd className="col-span-2">MIT</dd>
+            <dt className="text-muted-foreground">Source</dt>
+            <dd className="col-span-2">Public on GitHub</dd>
             <dt className="text-muted-foreground">OS</dt>
             <dd className="col-span-2">Ubuntu 20.04+</dd>
             <dt className="text-muted-foreground">Publisher</dt>
@@ -155,37 +150,6 @@ function About() {
               </a>
             </dd>
           </dl>
-        </CardContent>
-      </Card>
-
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-            Edition
-            <Badge variant="outline">Local</Badge>
-          </CardTitle>
-          <CardDescription>Plan and data storage.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid gap-3 text-sm md:grid-cols-3">
-            <dt className="text-muted-foreground">Plan</dt>
-            <dd className="md:col-span-2 font-medium">Community</dd>
-            <dt className="text-muted-foreground">Data</dt>
-            <dd className="md:col-span-2">SQLite on this server</dd>
-            <dt className="text-muted-foreground">Price</dt>
-            <dd className="md:col-span-2">Free</dd>
-            <dt className="text-muted-foreground">Storage</dt>
-            <dd className="md:col-span-2 font-mono text-xs">
-              /var/lib/wfilemanager/wfilemanager.db
-            </dd>
-            <dt className="text-muted-foreground">Backup</dt>
-            <dd className="md:col-span-2">Managed by the server administrator</dd>
-            <dt className="text-muted-foreground">Not included</dt>
-            <dd className="md:col-span-2">Server files and databases</dd>
-          </dl>
-          <div className="mt-4 rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-            wFileManager does not send application data to a managed backend.
-          </div>
         </CardContent>
       </Card>
 

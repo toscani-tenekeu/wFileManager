@@ -2,7 +2,7 @@
 
 wFileManager is a privileged Linux administration application. Keep changes focused, reviewable and tested. Report suspected vulnerabilities privately according to [SECURITY.md](./SECURITY.md).
 
-Never include production passwords, session tokens, recovery keys, managed-backend secrets, SQLite databases, customer files or private server configuration.
+Never include production passwords, session tokens, recovery keys, application databases, customer files or private server configuration.
 
 ## Development
 
@@ -23,15 +23,13 @@ bun run dev
 
 Use a unique development instance key. Never point development at a production instance.
 
-Configure Community SQLite in `.env`:
+Configure the application store in `.env`:
 
 ```env
 VITE_WFILEMANAGER_DATABASE_MODE=sqlite
 WFILEMANAGER_DATABASE_MODE=sqlite
 WFILEMANAGER_SQLITE_PATH=./data/wfilemanager.db
 ```
-
-Use the `supabase` database mode only when testing the Pro managed application-data backend.
 
 ## Required checks
 
@@ -58,23 +56,13 @@ Also test the modified behavior manually. A successful build is not sufficient f
 
 ## Database rules
 
-Both data modes must expose equivalent application behavior.
-
-For Community SQLite:
+For the application store:
 
 - use parameterized queries;
 - keep WAL mode and foreign keys enabled;
 - keep the database root-readable only;
 - add migrations for schema changes;
-- preserve self-managed backup and recovery behavior.
-
-For the Pro managed backend:
-
-- isolate every query by installation and user;
-- keep service-role keys inside trusted Edge Functions only;
-- use migrations for database changes;
-- preserve automatic backup and recovery behavior;
-- keep managed application records separate from files on the server filesystem.
+- preserve backup and recovery behavior.
 
 ## Installer and uninstaller rules
 
@@ -84,7 +72,8 @@ The normal installation command must remain:
 curl -fsSL https://igihzeyfgwhnuiflamvn.supabase.co/storage/v1/object/public/releases.kmerhosting.com/wfilemanager/install.sh | sudo bash
 ```
 
-The installer must verify that the domain's A record resolves to the target server, configure HTTPS, offer Community SQLite on the user's server or Pro managed application data, verify release checksums and finish only after a successful health check.
+The installer must verify that the domain's A record resolves to the target server, configure HTTPS,
+initialize application state, verify release checksums and finish only after a successful health check.
 
 The uninstaller must clearly distinguish between removing the application and data while keeping packages, and a full removal including packages installed by wFileManager.
 
@@ -105,7 +94,7 @@ Checklist:
 - [ ] Lint, typecheck and build pass.
 - [ ] Relevant manual tests pass.
 - [ ] Filesystem and archive protections remain intact.
-- [ ] Community and Pro data modes were considered.
+- [ ] Application-state changes include the required migration and recovery coverage.
 - [ ] Server filesystem data remains separate from wFileManager application records.
 - [ ] Documentation matches current behavior.
 

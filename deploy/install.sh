@@ -26,7 +26,7 @@ systemd_failure() {
 The server system manager is not healthy ($phase; state: $state).
 wFileManager cannot safely install or manage services while systemd is unavailable.
 Reboot the server, wait for SSH to return, then run the same official install command again.
-The installer is idempotent and reuses the selected domain, application-data plan and instance identity.
+The installer is idempotent and reuses the selected domain and existing application state.
 TEXT
   exit 1
 }
@@ -94,8 +94,9 @@ if [[ -f "$ENV_FILE" ]]; then
   EXISTING_INSTANCE_KEY="$(sed -n 's/^WFILEMANAGER_INSTANCE_KEY=//p' "$ENV_FILE" | tail -n1)"
 fi
 
-if [[ "$EXISTING_MODE" == "supabase" ]]; then
-  echo "Legacy Pro installations must update from the application before retirement." >&2
+if [[ "$EXISTING_MODE" != "" && "$EXISTING_MODE" != "sqlite" ]]; then
+  echo "This retired backend configuration cannot be converted in place." >&2
+  echo "Remove the previous installation before running this installer again." >&2
   exit 1
 fi
 DATABASE_MODE="sqlite"
@@ -202,8 +203,6 @@ cat >"$ENV_FILE" <<ENV
 PORT=$PORT
 WFILEMANAGER_DOMAIN=$DOMAIN
 WFILEMANAGER_PUBLIC_BASE_URL=https://$DOMAIN
-WFILEMANAGER_PLAN=community
-WFILEMANAGER_DATA_BACKEND=sqlite
 WFILEMANAGER_DATABASE_MODE=sqlite
 VITE_WFILEMANAGER_DATABASE_MODE=sqlite
 VITE_WFILEMANAGER_INSTANCE_KEY=$INSTANCE_KEY

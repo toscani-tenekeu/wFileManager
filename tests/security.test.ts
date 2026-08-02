@@ -89,17 +89,27 @@ describe("authentication protection", () => {
 describe("application health", () => {
   test("checks application metadata and persistent filesystem access", async () => {
     const stateRoot = await temporaryDirectory("wfm-health-");
-    process.env.WFILEMANAGER_DATABASE_MODE = "supabase";
+    const databasePath = path.join(stateRoot, "wfilemanager.db");
+    await execFileAsync("node", [
+      "-e",
+      [
+        "const { DatabaseSync } = require('node:sqlite')",
+        "const database = new DatabaseSync(process.argv[1])",
+        "database.exec('CREATE TABLE wfm_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)')",
+        "database.prepare('INSERT INTO wfm_meta (key, value) VALUES (?, ?)').run('configured', 'true')",
+        "database.close()",
+      ].join(";"),
+      databasePath,
+    ]);
+    process.env.WFILEMANAGER_SQLITE_PATH = databasePath;
     process.env.WFILEMANAGER_STATE_ROOT = stateRoot;
     const { healthSummary } = await import("../src/lib/server/health-runtime");
-    const result = await healthSummary();
+    const application = await healthSummary("application");
+    const filesystem = await healthSummary("filesystem");
 
-    expect(result.ok).toBe(true);
-    expect(result.checks.map((check) => check.name).sort()).toEqual([
-      "application",
-      "database",
-      "filesystem",
-    ]);
-    expect(result.checks.every((check) => check.ok)).toBe(true);
+    expect(application.ok).toBe(true);
+    expect(application.checks.map((check) => check.name)).toEqual(["application"]);
+    expect(filesystem.ok).toBe(true);
+    expect(filesystem.checks.map((check) => check.name)).toEqual(["filesystem"]);
   });
 });

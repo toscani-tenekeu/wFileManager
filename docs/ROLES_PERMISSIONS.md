@@ -1,6 +1,6 @@
 # Roles and permissions
 
-wFileManager roles are stored in the shared Supabase project using the `wfilemanager_` prefix.
+wFileManager roles are stored and enforced by the local application runtime.
 
 Implemented in v0.6.0:
 
@@ -9,7 +9,7 @@ Implemented in v0.6.0:
 - Update permissions on system roles except Administrator.
 - Delete unassigned custom roles.
 - Assign a role when creating a user.
-- Return the current role permissions to the local Ubuntu engine.
+- Return the current role permissions to the file-management engine.
 - Enforce action permissions on file, upload, trash and terminal endpoints.
 - Hide navigation entries that the current role cannot use.
 
