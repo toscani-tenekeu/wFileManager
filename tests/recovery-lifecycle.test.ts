@@ -35,11 +35,14 @@ describe("open source release", () => {
 describe("release-only remote backend", () => {
   test("keeps authentication and application data local", async () => {
     const authRuntime = await source("src/lib/server/local-auth-runtime.ts");
+    const gateway = await source("src/routes/api.gateway.ts");
     const healthRuntime = await source("src/lib/server/health-runtime.ts");
     const updater = await source("deploy/update.sh");
 
     expect(authRuntime).not.toContain("SUPABASE");
     expect(authRuntime).not.toContain("fetch(");
+    expect(gateway).toContain("http://127.0.0.1:${port}/api/sqlite");
+    expect(gateway).not.toContain('new URL("/api/sqlite", request.url)');
     expect(healthRuntime).not.toContain("Managed authentication backend");
     expect(updater).not.toContain("heartbeat_source");
     await expect(access(path.join(root, "deploy/wfilemanager-heartbeat"))).rejects.toThrow();

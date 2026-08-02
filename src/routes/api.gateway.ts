@@ -80,7 +80,10 @@ function validScope(value: string): value is Scope {
 }
 
 function upstreamFor(request: Request, scope: Scope, action: string) {
-  const url = new URL("/api/sqlite", request.url);
+  const port = Number(process.env.PORT || 1973);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535)
+    throw Object.assign(new Error("The local application port is invalid"), { status: 500 });
+  const url = new URL(`http://127.0.0.1:${port}/api/sqlite`);
   url.searchParams.set(
     "scope",
     scope === "login" || scope === "setup" ? "auth" : scope === "users" ? "auth" : scope,
